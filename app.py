@@ -32,9 +32,188 @@ st.set_page_config(
     page_icon="📐",
 )
 
-# ==================== CSS (mantido) ====================
-CUSTOM_CSS = """ ... (use exatamente o CSS completo que já está na sua versão atual) ... """
-# Para economizar espaço aqui, copie o mesmo CSS completo da versão anterior e cole no lugar de ...
+# ==================== CSS (o mesmo da sua versão anterior) ====================
+CUSTOM_CSS = """
+<style>
+body, .stApp {
+    background: radial-gradient(circle at top left, #faf5f5 0%, #f7f5f5 45%, #f4f4f4 100%);
+    color: #111827;
+    font-family: "Trebuchet MS", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.main-card {
+    background: linear-gradient(145deg, #ffffff 0%, #fdfbfb 40%, #ffffff 100%);
+    border-radius: 18px;
+    padding: 1.8rem 2.1rem;
+    border: 1px solid #e5e7eb;
+    box-shadow:
+        0 18px 40px rgba(15, 23, 42, 0.22),
+        0 0 0 1px rgba(15, 23, 42, 0.03);
+}
+.ufpe-top-bar {
+    width: 100%;
+    height: 8px;
+    border-radius: 0 0 14px 14px;
+    background: linear-gradient(90deg, #5b0000 0%, #990000 52%, #5b0000 100%);
+    margin-bottom: 0.9rem;
+}
+.ufpe-header-text {
+    font-size: 0.78rem;
+    line-height: 1.15rem;
+    text-transform: uppercase;
+    color: #111827;
+}
+.ufpe-header-text strong {
+    letter-spacing: 0.04em;
+}
+.ufpe-separator {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 0.8rem 0 1.0rem 0;
+}
+.app-title {
+    font-size: 2.0rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-bottom: 0.35rem;
+    color: #111827;
+}
+.app-title span.icon {
+    font-size: 2.4rem;
+}
+.app-subtitle {
+    font-size: 0.95rem;
+    color: #4b5563;
+    margin-bottom: 0.9rem;
+}
+.section-title {
+    font-size: 1.02rem;
+    font-weight: 600;
+    margin-top: 1.6rem;
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #111827;
+}
+.section-title span.dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: radial-gradient(circle at 30% 30%, #ffffff 0%, #990000 40%, #111827 100%);
+}
+.helper-box {
+    border-radius: 12px;
+    padding: 0.6rem 0.85rem;
+    background: linear-gradient(135deg, #fdf2f2 0%, #fff5f5 40%, #fdf2f2 100%);
+    border: 1px solid rgba(153, 0, 0, 0.25);
+    font-size: 0.83rem;
+    color: #4b5563;
+    margin-bottom: 0.7rem;
+}
+.footer-text {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+.stDownloadButton > button {
+    border-radius: 999px;
+    border: 1px solid #990000;
+    background: linear-gradient(135deg, #b00000, #730000);
+    color: white;
+    font-weight: 600;
+    font-size: 0.86rem;
+    padding: 0.45rem 0.95rem;
+    box-shadow: 0 8px 18px rgba(128,0,0,0.35);
+}
+.stDownloadButton > button:hover {
+    border-color: #111827;
+    background: linear-gradient(135deg, #111827, #4b0000);
+}
+
+/* Tabelas */
+[data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+    background: linear-gradient(145deg, #ffffff 0%, #f9fafb 60%, #ffffff 100%) !important;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+}
+[data-testid="stDataFrame"] thead tr {
+    background: linear-gradient(90deg, #f5e6e8 0%, #fdf2f2 100%) !important;
+    color: #5b101d !important;
+    font-weight: 600;
+}
+[data-testid="stDataFrame"] tbody tr:nth-child(odd) {
+    background-color: #fafafa !important;
+}
+[data-testid="stDataFrame"] tbody tr:nth-child(even) {
+    background-color: #ffffff !important;
+}
+[data-testid="stDataFrame"] tbody tr:hover {
+    background-color: #f3f0f0 !important;
+}
+
+/* Inputs */
+.stTextInput label, .stFileUploader label {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: #374151;
+}
+.stTextInput input {
+    background: linear-gradient(145deg, #ffffff, #f9fafb) !important;
+    color: #111827 !important;
+    border-radius: 999px;
+    border: 1px solid #d4d4d4;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.9rem;
+}
+.stTextInput input:focus {
+    border-color: #a32a36 !important;
+    box-shadow: 0 0 0 1px rgba(163,42,54,0.25);
+}
+
+/* Botões */
+.stButton button {
+    background: linear-gradient(135deg, #a32a36, #7d1220) !important;
+    color: #ffffff !important;
+    border-radius: 999px !important;
+    border: none !important;
+    padding: 0.4rem 1.4rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    box-shadow: 0 6px 16px rgba(125,18,32,0.25);
+}
+.stButton button:hover {
+    background: linear-gradient(135deg, #7d1220, #5a0d18) !important;
+    box-shadow: 0 4px 12px rgba(90,13,24,0.35);
+}
+
+/* Uploader PT-BR */
+[data-testid="stFileUploaderDropzone"] > div > div {
+    font-size: 0.9rem;
+}
+[data-testid="stFileUploaderDropzone"]::before {
+    content: "Arraste e solte o arquivo aqui ou";
+    display: block;
+    text-align: center;
+    margin-bottom: 0.25rem;
+    color: #374151;
+    font-size: 0.88rem;
+}
+[data-testid="stFileUploaderDropzone"] button {
+    color: #ffffff !important;
+    background: linear-gradient(135deg, #a32a36, #7d1220) !important;
+    border-radius: 999px !important;
+    border: none !important;
+    padding: 0.2rem 0.9rem;
+    font-size: 0.85rem;
+}
+[data-testid="stFileUploaderDropzone"] button::before {
+    content: "Escolher arquivo";
+}
+</style>
+"""
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # ==================== Cabeçalho UFPE ====================
@@ -261,7 +440,12 @@ def secao_triangulo(df_par):
         )
         return
 
-    aba1, aba2 = st.tabs(["Triângulo médio (todas as leituras)", "Triângulo específico (P1⇒P3, P3⇒P2, P2⇒P1)"])
+    aba1, aba2 = st.tabs(
+        [
+            "Triângulo médio (todas as leituras)",
+            "Triângulo específico (P1⇒P3, P3⇒P2, P2⇒P1)",
+        ]
+    )
 
     # ---- Aba Triângulo médio ----
     with aba1:
@@ -273,7 +457,11 @@ def secao_triangulo(df_par):
         lados_df = pd.DataFrame(
             {
                 "Lado": [lados["nome_lado_C"], lados["nome_lado_A"], lados["nome_lado_B"]],
-                "Distância (m)": [round(lados["C"], 4), round(lados["A"], 4), round(lados["B"], 4)],
+                "Distância (m)": [
+                    round(lados["C"], 4),
+                    round(lados["A"], 4),
+                    round(lados["B"], 4),
+                ],
             }
         )
         ang_df = pd.DataFrame(
@@ -325,7 +513,11 @@ def secao_triangulo(df_par):
         lados_df = pd.DataFrame(
             {
                 "Lado": ["P1–P3", "P3–P2", "P2–P1"],
-                "Distância (m)": [round(d_P1P3, 4), round(d_P3P2, 4), round(d_P2P1, 4)],
+                "Distância (m)": [
+                    round(d_P1P3, 4),
+                    round(d_P3P2, 4),
+                    round(d_P2P1, 4),
+                ],
             }
         )
         ang_df = pd.DataFrame(
