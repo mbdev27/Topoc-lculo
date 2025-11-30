@@ -1,46 +1,26 @@
-# Painel Integrado de Vigilância em Saúde
+# Calculadora de Ângulos e Distâncias – Método das Direções para Triângulos (UFPE)
 
-Este projeto unifica dois painéis interativos desenvolvidos com `Streamlit`, voltados para análise e visualização de dados da Vigilância Sanitária do município de Ipojuca.
+Aplicação Streamlit usada na disciplina **Equipamentos de Medição** (UFPE) para
+processar leituras de estação total e gerar:
 
-## 🔍 Painéis Disponíveis
+- Médias de direções horizontais (Hz);
+- Ângulos verticais/zenitais corrigidos;
+- Distâncias horizontais médias;
+- Triângulo formado pelos pontos P1, P2 e P3, com lados, ângulos internos e área.
 
-1. **Painel VISA** – Acompanhamento de inspeções sanitárias, produção por localidade, risco e motivação.
-2. **Painel REDESIM** – Indicadores de eficiência de resposta como "1ª visita em até 30 dias" e "Conclusão em até 90 dias".
+## Estrutura do projeto
 
-## 🚀 Instalação
+- `app.py` — interface principal em duas páginas:
+  - Página 1: **1. Modelo de planilha** e **2. Carregar dados de campo**.
+  - Página 2: cabeçalho UFPE + seções 3 a 7.
+- `processing.py` — funções de validação, cálculo, tabelas e modelo Excel.
+- `plotting.py` — desenho do triângulo em planta e exportação XLSX com figura.
+- `utils.py` — leitura da aba `Identificacao` e formatação da data em `DD/MM/AAAA`.
+- `requirements.txt` — dependências Python.
 
-1. Clone o repositório:
-```bash
-git clone https://github.com/seu-usuario/painel-vigilancia.git
-cd painel-vigilancia
-```
-2. (Recomendado) Crie e ative um ambiente virtual:
-```bash
-python -m venv venv
-source venv/bin/activate     # Linux/macOS
-venv\Scripts\activate        # Windows
-```
-3. Instale as dependências:
+## Uso
+
+1. Instale as dependências:
+
 ```bash
 pip install -r requirements.txt
-```
-
-## ▶️ Execução
-
-Execute o painel principal com:
-```bash
-streamlit run visa.py
-```
-
-Ou acesse via múltiplas páginas:
-```bash
-streamlit run pages/1_VISA.py
-```
-
-## 🔐 Acesso Restrito
-
-Credenciais padrão para acesso:
-- **Usuário:** `administrador`
-- **Senha:** `Ipojuca@2025*`
-
-A autenticação é obrigatória para todas as páginas do painel.
