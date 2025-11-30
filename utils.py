@@ -1,143 +1,139 @@
 # utils.py
-import math
-import re
-from typing import Any, Dict, List, Tuple
-
 import numpy as np
-import pandas as pd
-
-# Regex para parsing de ângulos
-ANGLE_RE = re.compile(r"(-?\d+)[^\d\-]+(\d+)[^\d\-]+(\d+(?:[.,]\d+)?)")
-NUM_RE = re.compile(r"^-?\d+(?:[.,]\d+)?$")
 
 
-def parse_angle_to_decimal(x: Any) -> float:
+def dms_to_decimal(dms_str: str) -> float:
     """
-    Converte ângulo em diferentes formatos (DMS, decimal com símbolos, etc.)
-    para graus decimais. Retorna NaN se não conseguir interpretar.
+    Converte uma string DMS do tipo 145°47′33′′ ou 145°47'33" para graus decimais.
+    Também aceita valores já em decimal (string com ponto).
     """
-    if pd.isna(x):
-        return np.nan
-    if isinstance(x, (int, float)):
-        return float(x)
+    if dms_str is None:
+        raise ValueError("Valor DMS None")
 
-    s = str(x).strip()
-    if s == "":
-        return np.nan
+    s = str(dms_str).strip()
 
-    # Normalização de caracteres
-    s = (
-        s.replace("º", "°")
-        .replace("\u2019", "'")
-        .replace("\u201d", '"')
-        .replace(":", " ")
-        .replace("\t", " ")
-    )
-    s = re.sub(r"\s+", " ", s)
-
-    # Tenta padrão DMS
-    m = ANGLE_RE.search(s)
-    if m:
-        deg = float(m.group(1))
-        minu = float(m.group(2))
-        sec = float(m.group(3).replace(",", "."))
-        sign = -1 if deg < 0 else 1
-        return sign * (abs(deg) + minu / 60.0 + sec / 3600.0)
-
-    # Tenta número simples decimal
-    if NUM_RE.match(s.replace(" ", "")):
+    # Se já aparenta ser decimal (tem ponto), tenta converter direto
+    if "." in s and "°" not in s and "'" not in s and "′" not in s:
         return float(s.replace(",", "."))
 
-    # Tenta extrair 3 números como D M S
-    nums = re.findall(r"-?\d+(?:[.,]\d+)?", s)
-    if len(nums) == 3:
-        deg, minu, sec = nums
-        deg = float(deg)
-        minu = float(minu)
-        sec = float(str(sec).replace(",", "."))
-        sign = -1 if deg < 0 else 1
-        return sign * (abs(deg) + minu / 60.0 + sec / 3600.0)
+    # Normalizar símbolos
+    s = s.replace("′", "'").replace("’’", '"').replace("″", '"').replace("’", "'")
 
-    return np.nan
+    # Separar graus
+    if "°" not in s:
+        raise ValueError(f"Formato DMS inválido: {s}")
+
+    graustr, resto = s.split("°", 1)
+    graus = float(graustr.strip())
+
+    minutos = 0.0
+    segundos = 0.0
+
+    if "'" in resto:
+        minstr, resto2 = resto.split("'", 1)
+        minutos = float(minstr.strip())
+        if '"' in resto2:
+            segstr = resto2.split('"', 1)[0]
+            segstr = segstr.replace("''", "").strip()
+            if segstr:
+                segundos = float(segstr)
+    else:
+        # Se não tiver minuto, tenta achar segundos direto
+        if '"' in resto:
+            segstr = resto.split('"', 1)[0]
+            segstr = segstr.strip()
+            if segstr:
+                segundos = float(segstr)
+
+    sinal = 1.0
+    if graus < 0:
+        sinal = -1.0
+        graus = abs(graus)
+
+    dec = graus + minutos / 60.0 + segundos / 3600.0
+    return sinal * dec
 
 
-def decimal_to_dms(angle: float) -> str:
-    """Converte ângulo em graus decimais para string DMS (00°00'00")."""
-    if pd.isna(angle):
-        return ""
-    a = float(angle) % 360.0
-    g = int(math.floor(a))
-    m_f = (a - g) * 60.0
-    m = int(math.floor(m_f))
-    s_f = (m_f - m) * 60.0
-    s = int(round(s_f))
-
-    # Ajustes de borda
-    if s >= 60:
-        s = 0
-        m += 1
-    if m >= 60:
-        m = 0
-        g += 1
-
-    return f"{g:02d}°{m:02d}'{s:02d}\""
-
-
-def mean_direction_two(a_deg: float, b_deg: float) -> float:
+def decimal_to_dms(dec: float):
     """
-    Média vetorial de duas direções em graus decimais (resolve problema 359° / 1°).
-    Retorna NaN se algum for NaN ou se o vetor resultar em (0,0).
+    Converte graus decimais para (graus, minutos, segundos).
     """
-    if pd.isna(a_deg) or pd.isna(b_deg):
-        return np.nan
-    a_rad = math.radians(a_deg)
-    b_rad = math.radians(b_deg)
-    x = math.cos(a_rad) + math.cos(b_rad)
-    y = math.sin(a_rad) + math.sin(b_rad)
-    if x == 0 and y == 0:
-        return np.nan
-    ang = math.degrees(math.atan2(y, x))
-    return ang % 360.0
+    sinal = -1 if dec < 0 else 1
+    dec = abs(dec)
+
+    g = int(dec)
+    resto = (dec - g) * 60.0
+    m = int(resto)
+    s = (resto - m) * 60.0
+
+    g *= sinal
+    return g, m, s
 
 
-def mean_direction_list(angles_deg: List[float]) -> float:
+def dms_str(dec: float) -> str:
     """
-    Média vetorial de uma lista de direções em graus (para médias por par EST–PV).
-    Ignora valores NaN.
+    Retorna string formatada G°M'S" a partir de graus decimais.
     """
-    vals = [float(a) for a in angles_deg if not pd.isna(a)]
-    if len(vals) == 0:
-        return np.nan
-    x = sum(math.cos(math.radians(a)) for a in vals)
-    y = sum(math.sin(math.radians(a)) for a in vals)
-    if x == 0 and y == 0:
-        return np.nan
-    ang = math.degrees(math.atan2(y, x))
-    return ang % 360.0
+    g, m, s = decimal_to_dms(dec)
+    return f"{g:d}°{abs(m):02d}'{abs(s):05.2f}\""
 
 
-def classificar_re_vante(
-    est: str,
-    pv: str,
-    ref_por_estacao: Dict[str, str]
-) -> str:
+def dms_str_inteiro(dec: float) -> str:
     """
-    Retorna 'Ré', 'Vante' ou '' (se não souber classificar) com base em um dicionário
-    de ponto de referência por estação.
+    Versão com segundos inteiros, para visual mais limpo.
     """
-    est_ = str(est).strip().upper()
-    pv_ = str(pv).strip().upper()
-    ref = ref_por_estacao.get(est_)
-    if ref is None:
-        return ""
-    return "Ré" if pv_ == ref else "Vante"
+    g, m, s = decimal_to_dms(dec)
+    s_rounded = int(round(abs(s)))
+    # Ajustar estouro 60"
+    if s_rounded == 60:
+        s_rounded = 0
+        m = abs(m) + 1
+        if m == 60:
+            m = 0
+            g = g + 1 if g >= 0 else g - 1
+    return f"{g:d}°{abs(m):02d}'{s_rounded:02d}\""
 
 
-def resumo_angulos(angA: float, angB: float, angC: float) -> Tuple[float, float]:
+def media_angular_graus(valores_graus):
     """
-    Retorna (soma, desvio) dos ângulos internos de um triângulo.
-    Desvio = soma - 180°.
+    Média vetorial de ângulos em graus.
+    Retorna média em graus no intervalo [0, 360).
     """
-    soma = angA + angB + angC
+    ang_rad = np.deg2rad(valores_graus)
+    c = np.cos(ang_rad).mean()
+    s = np.sin(ang_rad).mean()
+    media_rad = np.arctan2(s, c)
+    media_deg = np.rad2deg(media_rad)
+    if media_deg < 0:
+        media_deg += 360.0
+    return media_deg
+
+
+def desvio_padrao_angular_graus(valores_graus):
+    """
+    Desvio padrão aproximado de ângulos em graus:
+    calcula diferença mínima em relação à média (no círculo) e faz std desses erros.
+    """
+    if len(valores_graus) < 2:
+        return 0.0
+
+    media = media_angular_graus(valores_graus)
+    diffs = []
+    for v in valores_graus:
+        d = v - media
+        # normalizar para [-180, 180]
+        while d > 180:
+            d -= 360
+        while d < -180:
+            d += 360
+        diffs.append(d)
+    return float(np.std(diffs, ddof=1))
+
+
+def resumo_angulos(A_deg: float, B_deg: float, C_deg: float):
+    """
+    Retorna (soma_em_graus, desvio_em_graus).
+    """
+    soma = A_deg + B_deg + C_deg
     desvio = soma - 180.0
     return soma, desvio
