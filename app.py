@@ -21,6 +21,8 @@ from processing import (
     info_triangulo,
     resumo_linha_a_linha,
     resumo_por_par,
+    tabela_medicao_angular_horizontal,
+    tabela_medicao_angular_vertical,
     validar_dataframe,
 )
 from utils import resumo_angulos
@@ -398,13 +400,25 @@ def secao_calculos_basicos(df_uso):
     res = calcular_linha_a_linha(df_uso, ref_por_estacao)
     df_par = agregar_por_par(res)
 
+    # Tabela linha a linha
     resumo_df = resumo_linha_a_linha(res)
     st.markdown("##### Tabela linha a linha (cada leitura)")
     st.dataframe(resumo_df, use_container_width=True)
 
+    # Resumo numérico completo (DH/DN)
     resumo_par_df = resumo_por_par(df_par)
-    st.markdown("##### Resultados médios por par EST–PV")
+    st.markdown("##### Resumo numérico por par EST–PV (DH / DN)")
     st.dataframe(resumo_par_df, use_container_width=True)
+
+    # Nova tabela: Medição Angular Horizontal (modelo do slide)
+    st.markdown("##### Medição Angular Horizontal (Hz)")
+    tabela_hz = tabela_medicao_angular_horizontal(df_par)
+    st.dataframe(tabela_hz, use_container_width=True)
+
+    # Nova tabela: Medição Angular Vertical / Zenital (modelo do slide)
+    st.markdown("##### Medição Angular Vertical / Zenital (Z)")
+    tabela_z = tabela_medicao_angular_vertical(df_par)
+    st.dataframe(tabela_z, use_container_width=True)
 
     out_csv = resumo_par_df.to_csv(index=False).encode("utf-8-sig")
     st.download_button(
@@ -548,7 +562,7 @@ def rodape():
     st.markdown(
         """
         <p class="footer-text">
-            Versão do app: <code>7.0 — Refatorado em camadas (UI, processamento, gráficos) + soma/desvio dos ângulos</code>.
+            Versão do app: <code>7.1 — Tabelas no formato do slide (Medição Angular Horizontal / Vertical)</code>.
         </p>
         """,
         unsafe_allow_html=True,
