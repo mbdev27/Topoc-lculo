@@ -240,7 +240,8 @@ def resumo_linha_a_linha(res: pd.DataFrame) -> pd.DataFrame:
 
 def resumo_por_par(df_par: pd.DataFrame) -> pd.DataFrame:
     """
-    Monta DataFrame amigável para exibição das médias por par EST–PV.
+    Monta DataFrame amigável para exibição das médias por par EST–PV
+    (com DH/DN completos, mais “numérica bruta”).
     """
     return pd.DataFrame(
         {
@@ -255,6 +256,67 @@ def resumo_por_par(df_par: pd.DataFrame) -> pd.DataFrame:
             "DN_PD_médio (m)": df_par["DN_PD_m_par"],
             "DN_PI_médio (m)": df_par["DN_PI_m_par"],
             "DN_médio (m)": df_par["DN_med_m_par"],
+        }
+    )
+
+
+def tabela_medicao_angular_horizontal(df_par: pd.DataFrame) -> pd.DataFrame:
+    """
+    Monta tabela no formato do slide:
+    'Medição Angular Horizontal'
+    Colunas: EST, PV, Hz PD, Hz PI, Hz Médio, Hz Reduzido, Média das Séries.
+
+    Aqui:
+      - Hz PD, Hz PI e Hz Médio em DMS.
+      - Hz Reduzido = Hz Médio (por par) tomado diretamente (a redução
+        entre ré/vante pode ser feita depois, se desejado).
+      - Média das Séries = Hz Médio (média das leituras PD/PI).
+    """
+    hz_pd_med_dms = df_par["Hz_PD_med_deg"].apply(decimal_to_dms)
+    hz_pi_med_dms = df_par["Hz_PI_med_deg"].apply(decimal_to_dms)
+    hz_med_dms = df_par["Hz_med_deg_par"].apply(decimal_to_dms)
+
+    return pd.DataFrame(
+        {
+            "EST": df_par["EST"],
+            "PV": df_par["PV"],
+            "Hz PD": hz_pd_med_dms,
+            "Hz PI": hz_pi_med_dms,
+            "Hz Médio": hz_med_dms,
+            "Hz Reduzido": hz_med_dms,
+            "Média das Séries": hz_med_dms,
+        }
+    )
+
+
+def tabela_medicao_angular_vertical(df_par: pd.DataFrame) -> pd.DataFrame:
+    """
+    Monta tabela no formato do slide:
+    'Medição Angular Vertical/Zenital'
+    Colunas: EST, PV, Z PD, Z PI, Z Corrigido, Média das Séries.
+
+    Usa a fórmula do slide:
+       Z_corr = (Z_PD_med - Z_PI_med) / 2 + 180°
+    (tudo em graus decimais internamente, exibido em DMS).
+    """
+    z_pd_med = df_par["Z_PD_med_deg"]
+    z_pi_med = df_par["Z_PI_med_deg"]
+
+    # Z Corrigido em graus decimais
+    z_corr_deg = (z_pd_med - z_pi_med) / 2.0 + 180.0
+
+    z_pd_med_dms = z_pd_med.apply(decimal_to_dms)
+    z_pi_med_dms = z_pi_med.apply(decimal_to_dms)
+    z_corr_dms = z_corr_deg.apply(decimal_to_dms)
+
+    return pd.DataFrame(
+        {
+            "EST": df_par["EST"],
+            "PV": df_par["PV"],
+            "Z PD": z_pd_med_dms,
+            "Z PI": z_pi_med_dms,
+            "Z Corrigido": z_corr_dms,
+            "Média das Séries": z_corr_dms,
         }
     )
 
