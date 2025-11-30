@@ -1,355 +1,320 @@
 # processing.py
+from typing import Dict, List, Tuple
+
+import math
 import numpy as np
 import pandas as pd
 
 from utils import (
-    dms_to_decimal,
-    media_angular_graus,
-    desvio_padrao_angular_graus,
-    resumo_angulos,
+    classificar_re_vante,
+    decimal_to_dms,
+    mean_direction_list,
+    mean_direction_two,
+    parse_angle_to_decimal,
 )
 
-# Colunas obrigatórias, conforme sua planilha
-REQUIRED_COLS = [
-    "EST",
-    "PV",
-    "AnguloHorizontal_PD",
-    "AnguloHorizontal_PI",
-    "AnguloZenital_PD",
-    "AnguloZenital_PI",
-    "DistanciaInclinada_PD",
-    "DistanciaInclinada_PI",
-]
+# Pontos e pares fixos usados na análise do triângulo
+PONTOS_TRI = ("P1", "P2", "P3")
+PARES_TRI = ("P1⇒P3", "P3⇒P2", "P2⇒P1")
 
-# Pontos principais
-PONTOS_TRI = ["P1", "P2", "P3"]
+REQUIRED_COLS = ["EST", "PV", "Hz_PD", "Hz_PI", "Z_PD", "Z_PI", "DI_PD", "DI_PI"]
 
 
-def validar_dataframe(df_raw: pd.DataFrame):
+def normalizar_colunas(df_original: pd.DataFrame) -> pd.DataFrame:
     """
-    - Garante presença das colunas obrigatórias.
-    - Faz cópia só com as colunas relevantes.
+    Harmoniza nomes de colunas vindos de planilhas diversas para os nomes
+    esperados: EST, PV, Hz_PD, Hz_PI, Z_PD, Z_PI, DI_PD, DI_PI.
     """
-    erros = []
-    df = df_raw.copy()
+    df = df_original.copy()
+    colmap = {}
+    for c in df.columns:
+        low = c.strip().lower()
+        if low in ["est", "estacao", "estação"]:
+            colmap[c] = "EST"
+        elif low in ["pv", "ponto visado", "ponto_visado", "ponto"]:
+            colmap[c] = "PV"
+        elif ("horizontal" in low and "pd" in low) or ("hz" in low and "pd" in low):
+            colmap[c] = "Hz_PD"
+        elif ("horizontal" in low and "pi" in low) or ("hz" in low and "pi" in low):
+            colmap[c] = "Hz_PI"
+        elif ("zenital" in low and "pd" in low) or ("z" in low and "pd" in low):
+            colmap[c] = "Z_PD"
+        elif ("zenital" in low and "pi" in low) or ("z" in low and "pi" in low):
+            colmap[c] = "Z_PI"
+        elif "dist" in low and "pd" in low:
+            colmap[c] = "DI_PD"
+        elif "dist" in low and "pi" in low:
+            colmap[c] = "DI_PI"
+        else:
+            colmap[c] = c
+    return df.rename(columns=colmap)
 
-    # Verificar colunas
+
+def validar_dataframe(df_original: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
+    """
+    Normaliza colunas e verifica:
+      - Presença de colunas obrigatórias.
+      - Se Hz/Z/DI são conversíveis para ângulo/float.
+    Retorna (df_normalizado, lista_de_erros).
+    """
+    erros: List[str] = []
+    df = normalizar_colunas(df_original)
+
+    # Garante colunas obrigatórias
+    missing = [c for c in REQUIRED_COLS if c not in df.columns]
+    if missing:
+        erros.append("Colunas obrigatórias ausentes: " + ", ".join(missing))
+
     for c in REQUIRED_COLS:
         if c not in df.columns:
-            erros.append(f"Coluna obrigatória ausente: {c}")
+            df[c] = ""
 
-    if erros:
-        return pd.DataFrame(columns=REQUIRED_COLS), erros
+    invalid_rows_hz: List[int] = []
+    invalid_rows_z: List[int] = []
+    invalid_rows_di: List[int] = []
 
-    # Garantir tipos básicos
-    df = df[REQUIRED_COLS].copy()
+    for idx, row in df.iterrows():
+        hz_pd = parse_angle_to_decimal(row.get("Hz_PD", ""))
+        hz_pi = parse_angle_to_decimal(row.get("Hz_PI", ""))
+        z_pd = parse_angle_to_decimal(row.get("Z_PD", ""))
+        z_pi = parse_angle_to_decimal(row.get("Z_PI", ""))
+        if np.isnan(hz_pd) or np.isnan(hz_pi):
+            invalid_rows_hz.append(idx + 1)
+        if np.isnan(z_pd) or np.isnan(z_pi):
+            invalid_rows_z.append(idx + 1)
+        try:
+            di_pd = float(str(row.get("DI_PD", "")).replace(",", "."))
+            di_pi = float(str(row.get("DI_PI", "")).replace(",", "."))
+            if np.isnan(di_pd) or np.isnan(di_pi):
+                invalid_rows_di.append(idx + 1)
+        except Exception:
+            invalid_rows_di.append(idx + 1)
 
-    # Nada muito agressivo aqui, o tratamento principal vem nas funções de cálculo
+    if invalid_rows_hz:
+        erros.append(
+            "Valores inválidos ou vazios em Hz_PD / Hz_PI nas linhas: "
+            + ", ".join(map(str, invalid_rows_hz))
+            + "."
+        )
+    if invalid_rows_z:
+        erros.append(
+            "Valores inválidos ou vazios em Z_PD / Z_PI nas linhas: "
+            + ", ".join(map(str, invalid_rows_z))
+            + "."
+        )
+    if invalid_rows_di:
+        erros.append(
+            "Valores inválidos ou vazios em DI_PD / DI_PI nas linhas: "
+            + ", ".join(map(str, invalid_rows_di))
+            + "."
+        )
+
     return df, erros
 
 
-def _dist_mm_para_m(val):
+def calcular_linha_a_linha(
+    df_uso: pd.DataFrame,
+    ref_por_estacao: Dict[str, str],
+) -> pd.DataFrame:
     """
-    Converte leituras de distância em mm para metros (float).
+    Aplica todos os cálculos linha a linha:
+      - Classificação Ré/Vante.
+      - Conversão de Hz/Z para decimal.
+      - DH/DN PD/PI + médias.
+      - Hz médios (PD/PI) em decimal / DMS.
+    Retorna DataFrame `res` com colunas de trabalho (Hz_PD_deg, etc.).
     """
-    if pd.isna(val):
-        return np.nan
-    try:
-        return float(val) / 1000.0
-    except Exception:
-        return np.nan
+    res = df_uso.copy()
+
+    # Ré / Vante
+    res["Tipo"] = res.apply(
+        lambda r: classificar_re_vante(r["EST"], r["PV"], ref_por_estacao),
+        axis=1,
+    )
+
+    # Ângulos em decimal
+    for col in ["Hz_PD", "Hz_PI", "Z_PD", "Z_PI"]:
+        res[col + "_deg"] = res[col].apply(parse_angle_to_decimal)
+
+    # Distâncias inclinadas
+    res["DI_PD_m"] = res["DI_PD"].apply(lambda x: float(str(x).replace(",", ".")))
+    res["DI_PI_m"] = res["DI_PI"].apply(lambda x: float(str(x).replace(",", ".")))
+
+    # DH/DN
+    z_pd_rad = res["Z_PD_deg"] * np.pi / 180.0
+    z_pi_rad = res["Z_PI_deg"] * np.pi / 180.0
+
+    res["DH_PD_m"] = np.abs(res["DI_PD_m"] * np.sin(z_pd_rad)).round(4)
+    res["DN_PD_m"] = np.abs(res["DI_PD_m"] * np.cos(z_pd_rad)).round(4)
+    res["DH_PI_m"] = np.abs(res["DI_PI_m"] * np.sin(z_pi_rad)).round(4)
+    res["DN_PI_m"] = np.abs(res["DI_PI_m"] * np.cos(z_pi_rad)).round(4)
+
+    # Hz médio (PD/PI)
+    res["Hz_med_deg"] = res.apply(
+        lambda r: mean_direction_two(r["Hz_PD_deg"], r["Hz_PI_deg"]), axis=1
+    )
+    res["Hz_med_DMS"] = res["Hz_med_deg"].apply(decimal_to_dms)
+
+    # DH/DN médios
+    res["DH_med_m"] = np.abs((res["DH_PD_m"] + res["DH_PI_m"]) / 2.0).round(4)
+    res["DN_med_m"] = np.abs((res["DN_PD_m"] + res["DN_PI_m"]) / 2.0).round(4)
+
+    return res
 
 
-def _hz_str_to_decimal(s):
-    return dms_to_decimal(s)
-
-
-def _z_str_to_decimal(s):
-    return dms_to_decimal(s)
-
-
-def calcular_linha_a_linha(df: pd.DataFrame):
+def agregar_por_par(res: pd.DataFrame) -> pd.DataFrame:
     """
-    Calcula, para cada linha da tabela de entrada:
-    - Hz_PD / Hz_PI em graus decimais
-    - Hz_médio (média vetorial de PD e PI)
-    - Z_PD / Z_PI em graus decimais
-    - Distâncias inclinadas em metros
-    - Distâncias horizontais DH e diferenças de nível DN por PD/PI e médias
+    Agrega o DataFrame linha a linha em um DataFrame por par EST–PV (`df_par`),
+    calculando:
+      - Hz/Z médios com média vetorial.
+      - DI médias aritméticas.
+      - DH/DN médios derivados.
     """
-    linhas = []
+    def agg_par(df_group: pd.DataFrame) -> pd.Series:
+        out = {}
+        out["Hz_PD_med_deg"] = mean_direction_list(df_group["Hz_PD_deg"])
+        out["Hz_PI_med_deg"] = mean_direction_list(df_group["Hz_PI_deg"])
+        out["Z_PD_med_deg"] = mean_direction_list(df_group["Z_PD_deg"])
+        out["Z_PI_med_deg"] = mean_direction_list(df_group["Z_PI_deg"])
+        out["DI_PD_med_m"] = float(df_group["DI_PD_m"].mean())
+        out["DI_PI_med_m"] = float(df_group["DI_PI_m"].mean())
+        return pd.Series(out)
 
-    for idx, row in df.iterrows():
-        est = str(row["EST"]).strip()
-        pv = str(row["PV"]).strip()
+    df_par = res.groupby(["EST", "PV"], as_index=False).apply(agg_par)
 
-        # Hz em graus
-        hz_pd = _hz_str_to_decimal(row["AnguloHorizontal_PD"])
-        hz_pi = _hz_str_to_decimal(row["AnguloHorizontal_PI"])
-        hz_med = media_angular_graus([hz_pd, hz_pi])
+    # Hz médio por par
+    df_par["Hz_med_deg_par"] = df_par.apply(
+        lambda r: mean_direction_two(r["Hz_PD_med_deg"], r["Hz_PI_med_deg"]),
+        axis=1,
+    )
+    df_par["Hz_med_DMS_par"] = df_par["Hz_med_deg_par"].apply(decimal_to_dms)
 
-        # Z em graus
-        z_pd = _z_str_to_decimal(row["AnguloZenital_PD"])
-        z_pi = _z_str_to_decimal(row["AnguloZenital_PI"])
-        # ângulo zenital = 0 no zênite; DH = DI * sin(Z), DN = DI * cos(Z) se Z medido desse jeito.
-        z_pd_rad = np.deg2rad(z_pd)
-        z_pi_rad = np.deg2rad(z_pi)
+    # DH/DN médios por par
+    zpd_par_rad = df_par["Z_PD_med_deg"] * np.pi / 180.0
+    zpi_par_rad = df_par["Z_PI_med_deg"] * np.pi / 180.0
 
-        # DI em metros
-        di_pd_m = _dist_mm_para_m(row["DistanciaInclinada_PD"])
-        di_pi_m = _dist_mm_para_m(row["DistanciaInclinada_PI"])
-        di_med_m = np.nanmean([di_pd_m, di_pi_m])
+    df_par["DH_PD_m_par"] = np.abs(
+        df_par["DI_PD_med_m"] * np.sin(zpd_par_rad)
+    ).round(4)
+    df_par["DN_PD_m_par"] = np.abs(
+        df_par["DI_PD_med_m"] * np.cos(zpd_par_rad)
+    ).round(4)
+    df_par["DH_PI_m_par"] = np.abs(
+        df_par["DI_PI_med_m"] * np.sin(zpi_par_rad)
+    ).round(4)
+    df_par["DN_PI_m_par"] = np.abs(
+        df_par["DI_PI_med_m"] * np.cos(zpi_par_rad)
+    ).round(4)
 
-        # DH, DN
-        dh_pd = di_pd_m * np.sin(z_pd_rad)
-        dh_pi = di_pi_m * np.sin(z_pi_rad)
-        dn_pd = di_pd_m * np.cos(z_pd_rad)
-        dn_pi = di_pi_m * np.cos(z_pi_rad)
+    df_par["DH_med_m_par"] = np.abs(
+        (df_par["DH_PD_m_par"] + df_par["DH_PI_m_par"]) / 2.0
+    ).round(4)
+    df_par["DN_med_m_par"] = np.abs(
+        (df_par["DN_PD_m_par"] + df_par["DN_PI_m_par"]) / 2.0
+    ).round(4)
 
-        dh_med = np.nanmean([dh_pd, dh_pi])
-        dn_med = np.nanmean([dn_pd, dn_pi])
-
-        linhas.append(
-            {
-                "EST": est,
-                "PV": pv,
-                "Hz_PD_graus": hz_pd,
-                "Hz_PI_graus": hz_pi,
-                "Hz_med_graus": hz_med,
-                "Z_PD_graus": z_pd,
-                "Z_PI_graus": z_pi,
-                "DI_PD_m": di_pd_m,
-                "DI_PI_m": di_pi_m,
-                "DI_med_m": di_med_m,
-                "DH_PD_m": dh_pd,
-                "DH_PI_m": dh_pi,
-                "DH_med_m": dh_med,
-                "DN_PD_m": dn_pd,
-                "DN_PI_m": dn_pi,
-                "DN_med_m": dn_med,
-            }
-        )
-
-    return pd.DataFrame(linhas)
+    return df_par
 
 
-def agregar_por_par(df_linha: pd.DataFrame):
+def resumo_linha_a_linha(res: pd.DataFrame) -> pd.DataFrame:
     """
-    Agrupa por (EST, PV) e calcula:
-    - Hz médio e desvio padrão angular
-    - DI média (m) e desvio padrão
-    - DH média (m) e desvio padrão
-    - DN média (m) e desvio padrão
+    Monta DataFrame amigável para exibição linha a linha.
     """
-    grupos = []
-    for (est, pv), grupo in df_linha.groupby(["EST", "PV"]):
-        hz_todos = list(grupo["Hz_med_graus"].dropna())
-
-        if len(hz_todos) == 0:
-            hz_med = np.nan
-            hz_std = np.nan
-        else:
-            hz_med = media_angular_graus(hz_todos)
-            hz_std = desvio_padrao_angular_graus(hz_todos)
-
-        for col in ["DI_med_m", "DH_med_m", "DN_med_m"]:
-            # iremos pegar a média e o desvio padrão dessa coluna
-            pass
-
-        di_vals = grupo["DI_med_m"].dropna().values
-        dh_vals = grupo["DH_med_m"].dropna().values
-        dn_vals = grupo["DN_med_m"].dropna().values
-
-        di_med = float(np.mean(di_vals)) if len(di_vals) > 0 else np.nan
-        dh_med = float(np.mean(dh_vals)) if len(dh_vals) > 0 else np.nan
-        dn_med = float(np.mean(dn_vals)) if len(dn_vals) > 0 else np.nan
-
-        di_std = float(np.std(di_vals, ddof=1)) if len(di_vals) > 1 else 0.0
-        dh_std = float(np.std(dh_vals, ddof=1)) if len(dh_vals) > 1 else 0.0
-        dn_std = float(np.std(dn_vals, ddof=1)) if len(dn_vals) > 1 else 0.0
-
-        grupos.append(
-            {
-                "EST": est,
-                "PV": pv,
-                "Hz_med_graus_par": hz_med,
-                "Hz_std_graus_par": hz_std,
-                "DI_med_m_par": di_med,
-                "DI_std_m_par": di_std,
-                "DH_med_m_par": dh_med,
-                "DH_std_m_par": dh_std,
-                "DN_med_m_par": dn_med,
-                "DN_std_m_par": dn_std,
-            }
-        )
-
-    return pd.DataFrame(grupos)
+    return pd.DataFrame(
+        {
+            "EST": res["EST"],
+            "PV": res["PV"],
+            "Tipo": res["Tipo"],
+            "Hz_PD": res["Hz_PD"],
+            "Hz_PI": res["Hz_PI"],
+            "Hz_médio (DMS)": res["Hz_med_DMS"].fillna(""),
+            "DH_PD (m)": res["DH_PD_m"],
+            "DH_PI (m)": res["DH_PI_m"],
+            "DH_médio (m)": res["DH_med_m"],
+            "DN_PD (m)": res["DN_PD_m"],
+            "DN_PI (m)": res["DN_PI_m"],
+            "DN_médio (m)": res["DN_med_m"],
+        }
+    )
 
 
-def resumo_linha_a_linha(df_linha: pd.DataFrame):
+def resumo_por_par(df_par: pd.DataFrame) -> pd.DataFrame:
     """
-    Tabela mais amigável linha a linha (para mostrar no app).
+    Monta DataFrame amigável para exibição das médias por par EST–PV.
     """
-    return df_linha[
-        [
-            "EST",
-            "PV",
-            "Hz_PD_graus",
-            "Hz_PI_graus",
-            "Hz_med_graus",
-            "DI_PD_m",
-            "DI_PI_m",
-            "DI_med_m",
-            "DH_PD_m",
-            "DH_PI_m",
-            "DH_med_m",
-        ]
-    ].copy()
+    return pd.DataFrame(
+        {
+            "EST": df_par["EST"],
+            "PV": df_par["PV"],
+            "Hz_PD_médio (deg)": df_par["Hz_PD_med_deg"].round(6),
+            "Hz_PI_médio (deg)": df_par["Hz_PI_med_deg"].round(6),
+            "Hz_médio (DMS)": df_par["Hz_med_DMS_par"],
+            "DH_PD_médio (m)": df_par["DH_PD_m_par"],
+            "DH_PI_médio (m)": df_par["DH_PI_m_par"],
+            "DH_médio (m)": df_par["DH_med_m_par"],
+            "DN_PD_médio (m)": df_par["DN_PD_m_par"],
+            "DN_PI_médio (m)": df_par["DN_PI_m_par"],
+            "DN_médio (m)": df_par["DN_med_m_par"],
+        }
+    )
 
 
-def resumo_por_par(df_par: pd.DataFrame):
+def dist(
+    p: str,
+    q: str,
+    coords: Dict[str, Tuple[float, float]],
+) -> float:
+    """Distância euclidiana entre pontos p e q em coords."""
+    x1, y1 = coords[p]
+    x2, y2 = coords[q]
+    return math.hypot(x2 - x1, y2 - y1)
+
+
+def angulo_oposto(
+    lado_oposto: float,
+    lado1: float,
+    lado2: float,
+) -> float:
     """
-    Tabela resumo por par, com médias e desvios padrão de Hz, DI, DH.
+    Calcula o ângulo oposto a 'lado_oposto' por lei dos cossenos.
+    Retorna o ângulo em graus.
     """
-    return df_par[
-        [
-            "EST",
-            "PV",
-            "Hz_med_graus_par",
-            "Hz_std_graus_par",
-            "DI_med_m_par",
-            "DI_std_m_par",
-            "DH_med_m_par",
-            "DH_std_m_par",
-        ]
-    ].copy()
+    num = lado1 ** 2 + lado2 ** 2 - lado_oposto ** 2
+    den = 2 * lado1 * lado2
+    if den == 0:
+        return float("nan")
+    cos_val = max(-1.0, min(1.0, num / den))
+    return math.degrees(math.acos(cos_val))
 
 
-def construir_triangulo_medio(df_par: pd.DataFrame):
+def info_triangulo(
+    pA: str,
+    pB: str,
+    pC: str,
+    coords: Dict[str, Tuple[float, float]],
+):
     """
-    Constrói lados do triângulo médio P1-P2-P3 com base nas
-    DI_med_m_par (ou DH_med_m_par) entre pares:
-    - P1-P2
-    - P1-P3
-    - P2-P3
-    Retorna (lados, angulos, area) em forma de dicionário.
+    Calcula lados, ângulos e área de um triângulo definido por pA, pB, pC
+    em um dicionário de coordenadas 'coords'.
     """
-    # Buscar as distâncias médias (em metros)
-    def get_dist(par1, par2):
-        g1 = df_par[(df_par["EST"] == par1) & (df_par["PV"] == par2)]
-        g2 = df_par[(df_par["EST"] == par2) & (df_par["PV"] == par1)]
-        if not g1.empty:
-            return float(g1["DI_med_m_par"].iloc[0])
-        if not g2.empty:
-            return float(g2["DI_med_m_par"].iloc[0])
-        return np.nan
+    a = dist(pB, pC, coords)
+    b = dist(pA, pC, coords)
+    c = dist(pA, pB, coords)
 
-    d12 = get_dist("P1", "P2")
-    d13 = get_dist("P1", "P3")
-    d23 = get_dist("P2", "P3")
+    ang_A = angulo_oposto(a, b, c)
+    ang_B = angulo_oposto(b, a, c)
+    ang_C = angulo_oposto(c, a, b)
 
-    if any(np.isnan([d12, d13, d23])):
-        raise ValueError(
-            "Faltam distâncias médias para formar o triângulo P1-P2-P3 (DI_med_m_par)."
-        )
+    s = (a + b + c) / 2.0
+    area = math.sqrt(max(0.0, s * (s - a) * (s - b) * (s - c)))
 
-    # Vamos usar notação A=BC oposto a A, B=AC oposto a B, C=AB oposto a C
-    # e vértices A=P1, B=P2, C=P3
-    # Lado oposto a A (P1) = BC = d23
-    A = d23
-    # Lado oposto a B (P2) = AC = d13
-    B = d13
-    # Lado oposto a C (P3) = AB = d12
-    C = d12
-
-    # Lei dos cossenos para ângulos em graus
-    def angle(a, b, c):
-        # ângulo oposto a a, com lados (a, b, c)
-        cosA = (b**2 + c**2 - a**2) / (2 * b * c)
-        cosA = max(min(cosA, 1.0), -1.0)
-        return np.rad2deg(np.arccos(cosA))
-
-    ang_A = angle(A, B, C)
-    ang_B = angle(B, A, C)
-    ang_C = angle(C, A, B)
-
-    # Área (Heron)
-    s = 0.5 * (A + B + C)
-    area = np.sqrt(max(s * (s - A) * (s - B) * (s - C), 0.0))
-
-    lados = {"A": A, "B": B, "C": C}
+    lados = {
+        "A": a,
+        "B": b,
+        "C": c,
+        "nome_lado_A": f"{pB}{pC}",
+        "nome_lado_B": f"{pA}{pC}",
+        "nome_lado_C": f"{pA}{pB}",
+    }
     angulos = {"A": ang_A, "B": ang_B, "C": ang_C}
-    soma_ang, desvio = resumo_angulos(ang_A, ang_B, ang_C)
-
-    return lados, angulos, area, soma_ang, desvio
-
-
-def construir_triangulo_especifico(df_par: pd.DataFrame):
-    """
-    Usa o circuito específico:
-    - P1 ⇒ P3
-    - P3 ⇒ P2
-    - P2 ⇒ P1
-    E monta um triângulo com lados = DI_med_m_par em metros.
-    Retorna:
-      coords_tri, (d13, d32, d21), (ang_P1, ang_P3, ang_P2), soma, desvio, area
-    """
-    def get_di(est, pv):
-        g = df_par[(df_par["EST"] == est) & (df_par["PV"] == pv)]
-        if g.empty:
-            raise ValueError(f"Não há dados médios DI_med_m_par para {est}–{pv}.")
-        return float(g["DI_med_m_par"].iloc[0])
-
-    d13 = get_di("P1", "P3")
-    d32 = get_di("P3", "P2")
-    d21 = get_di("P2", "P1")
-
-    # Notação:
-    # vértices: P1, P3, P2
-    # lados:
-    #   - entre P1 e P3 = d13
-    #   - entre P3 e P2 = d32
-    #   - entre P2 e P1 = d21
-    # Vamos montar coordenadas:
-    # P1 = (0, 0)
-    # P3 = (d13, 0)
-    # P2 em algum lugar definido pela lei dos cossenos
-
-    # ângulo no vértice P3, oposto ao lado P1-P2 (d21)
-    def angle(a, b, c):
-        cosA = (b**2 + c**2 - a**2) / (2 * b * c)
-        cosA = max(min(cosA, 1.0), -1.0)
-        return np.rad2deg(np.arccos(cosA))
-
-    # Ângulos internos:
-    #   - em P1: oposto a lado P3-P2 (d32)
-    ang_P1 = angle(d32, d13, d21)
-    #   - em P3: oposto a lado P2-P1 (d21)
-    ang_P3 = angle(d21, d13, d32)
-    #   - em P2: oposto a lado P1-P3 (d13)
-    ang_P2 = angle(d13, d32, d21)
-
-    soma_ang, desvio = resumo_angulos(ang_P1, ang_P3, ang_P2)
-
-    # Área (Heron)
-    s = 0.5 * (d13 + d32 + d21)
-    area = np.sqrt(max(s * (s - d13) * (s - d32) * (s - d21), 0.0))
-
-    # Coordenadas para desenho:
-    P1 = np.array([0.0, 0.0])
-    P3 = np.array([d13, 0.0])
-
-    # Para achar P2: lado P2-P1 = d21, P2-P3 = d32
-    # Usamos coordenadas: P2 = (x, y)
-    # dist^2 P2-P1: x^2 + y^2 = d21^2
-    # dist^2 P2-P3: (x - d13)^2 + y^2 = d32^2
-    # Subtraindo as duas equações, isolamos x.
-    x = (d21**2 - d32**2 + d13**2) / (2 * d13)
-    y_sq = d21**2 - x**2
-    y = np.sqrt(max(y_sq, 0.0))
-
-    P2 = np.array([x, y])
-
-    coords_tri = {"P1": P1, "P3": P3, "P2": P2}
-
-    return coords_tri, (d13, d32, d21), (ang_P1, ang_P3, ang_P2), soma_ang, desvio, area
+    return lados, angulos, area
