@@ -11,33 +11,26 @@ import pandas as pd
 from processing import decimal_to_dms
 
 
-def _nome_para_ordem(ponto: str) -> int:
-    """Ordem cíclica P1 < P2 < P3 para organizar os rótulos em sentido horário."""
-    ordem = {"P1": 0, "P2": 1, "P3": 2}
-    return ordem.get(ponto, 99)
-
-
 def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
     """
     Desenha o triângulo em planta.
 
-    - O vértice na origem (0,0) é SEMPRE o ponto real da estação usada nas leituras: info["EST"]
-      (pode ser P1, P2 ou P3).
-    - Os outros dois vértices são info["PV1"] e info["PV2"].
-    - Rótulos gráficos exibem apenas P1, P2 e P3 (sem letras A/B/C).
+    - O vértice na origem (0,0) é SEMPRE o ponto da estação real info["EST"]
+      (P1, P2 ou P3), ou seja, o ponto de vista do observador em campo.
+    - Os outros dois vértices são PV1 e PV2.
+    - Rótulos mostram apenas P1, P2 e P3 (sem A/B/C).
     """
-    est = info["EST"]   # ponto estação (ex.: P1)
-    pv1 = info["PV1"]   # ponto visado 1 (P2 ou P3)
-    pv2 = info["PV2"]   # ponto visado 2 (P2 ou P3)
+    est = info["EST"]   # estação (P1, P2 ou P3)
+    pv1 = info["PV1"]
+    pv2 = info["PV2"]
 
-    # Comprimentos dos lados tal como calculados
     AB = info["AB"]  # EST–PV1
     AC = info["AC"]  # EST–PV2
     BC = info["BC"]  # PV1–PV2
 
-    # Colocamos a estação EST na origem (0,0) – PONTO DE VISTA
+    # Estação na origem
     x_E, y_E = 0.0, 0.0
-    x_V2, y_V2 = AC, 0.0  # segundo visado em cima do eixo X
+    x_V2, y_V2 = AC, 0.0  # segundo visado no eixo X
 
     if AC == 0:
         x_V1, y_V1 = AB, 0.0
@@ -46,18 +39,17 @@ def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
         arg = max(AB**2 - x_V1**2, 0.0)
         y_V1 = math.sqrt(arg)
 
-    # Ordena os dois visados para uma leitura visual mais natural:
-    # queremos que, ao girar no sentido horário, eles sigam a sequência P1,P2,P3.
-    visados = [
-        ("pv1", pv1, x_V1, y_V1),
-        ("pv2", pv2, x_V2, y_V2),
-    ]
-    visados.sort(key=lambda t: _nome_para_ordem(t[1]))
+    # Caso especial: usuário escolheu Estação A (P1) e 1ª leitura
+    # Queremos garantir que o P1 (estação) está na base esquerda
+    # (já está em (0,0)), e a figura "abre" para a direita.
+    # Se, por algum motivo, os dois visados ficaram com X negativos,
+    # espelhamos no eixo Y.
+    if estacao_op == "A" and conjunto_op == "1ª leitura":
+        if x_V1 < 0 and x_V2 < 0:
+            x_V1, x_V2 = -x_V1, -x_V2
 
-    (tag1, nome1, x1, y1), (tag2, nome2, x2, y2) = visados
-
-    xs = [x_E, x1, x2, x_E]
-    ys = [y_E, y1, y2, y_E]
+    xs = [x_E, x_V1, x_V2, x_E]
+    ys = [y_E, y_V1, y_V2, y_E]
 
     fig, ax = plt.subplots()
     ax.plot(xs, ys, "-o", color="#7f0000")
@@ -65,33 +57,30 @@ def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
     fig.patch.set_facecolor("#ffffff")
     ax.set_aspect("equal", "box")
 
-    # Rótulos: APENAS nomes P1, P2, P3, sem letras entre parênteses
+    # Rótulos: somente P1, P2, P3
     ax.text(x_E, y_E, f"{est}", fontsize=10, color="#111827")
-    ax.text(x1, y1, f"{nome1}", fontsize=10, color="#111827")
-    ax.text(x2, y2, f"{nome2}", fontsize=10, color="#111827")
+    ax.text(x_V1, y_V1, f"{pv1}", fontsize=10, color="#111827")
+    ax.text(x_V2, y_V2, f"{pv2}", fontsize=10, color="#111827")
 
-    # Descobrir qual lado é qual, usando nomes dos pontos
-    # Lado estação–pv1
+    # Lados
     ax.text(
-        (x_E + x1) / 2,
-        (y_E + y1) / 2,
-        f"{est}–{nome1} = {AB:.3f} m",
+        (x_E + x_V1) / 2,
+        (y_E + y_V1) / 2,
+        f"{est}–{pv1} = {AB:.3f} m",
         color="#374151",
         fontsize=9,
     )
-    # Lado estação–pv2
     ax.text(
-        (x_E + x2) / 2,
-        (y_E + y2) / 2,
-        f"{est}–{nome2} = {AC:.3f} m",
+        (x_E + x_V2) / 2,
+        (y_E + y_V2) / 2,
+        f"{est}–{pv2} = {AC:.3f} m",
         color="#374151",
         fontsize=9,
     )
-    # Lado pv1–pv2
     ax.text(
-        (x1 + x2) / 2,
-        (y1 + y2) / 2,
-        f"{nome1}–{nome2} = {BC:.3f} m",
+        (x_V1 + x_V2) / 2,
+        (y_V1 + y_V2) / 2,
+        f"{pv1}–{pv2} = {BC:.3f} m",
         color="#374151",
         fontsize=9,
     )
