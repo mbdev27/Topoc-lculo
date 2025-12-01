@@ -440,7 +440,19 @@ def tabela_resumo_final(res: pd.DataFrame, renomear_para_letras: bool = True) ->
 # ---------------------------------------------------------------------
 # Triângulo
 # ---------------------------------------------------------------------
-def _angulo_interno(a, b, c):
+import math
+from typing import Optional, Tuple, Dict
+
+import numpy as np
+import pandas as pd
+
+# ... (demais imports e funções permanecem iguais acima)
+
+
+def _angulo_interno(a: float, b: float, c: float) -> float:
+    """
+    Retorna o ângulo oposto ao lado 'a', num triângulo com lados a, b, c.
+    """
     try:
         if a <= 0 or b <= 0 or c <= 0:
             return float("nan")
@@ -451,7 +463,25 @@ def _angulo_interno(a, b, c):
         return float("nan")
 
 
-def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int):
+def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> Optional[Dict]:
+    """
+    A partir de duas linhas (idx1 e idx2) de 'res' que compartilham a mesma estação (EST),
+    constrói o triângulo cujos vértices são:
+
+      - A: estação (EST)
+      - B: primeiro ponto visado (PV1)
+      - C: segundo ponto visado (PV2)
+
+    Lados:
+      - AB = DH_med da linha 1
+      - AC = DH_med da linha 2
+      - BC = calculado pela lei dos cossenos
+
+    Os ângulos internos são:
+      - ang_A_deg → ângulo no vértice A (EST)
+      - ang_B_deg → ângulo no vértice B (PV1)
+      - ang_C_deg → ângulo no vértice C (PV2)
+    """
     if idx1 == idx2:
         return None
     if idx1 < 0 or idx1 >= len(res) or idx2 < 0 or idx2 >= len(res):
@@ -463,83 +493,79 @@ def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int):
     est1, est2 = str(r1["EST"]), str(r2["EST"])
     pv1, pv2 = str(r1["PV"]), str(r2["PV"])
 
+    # Mesma estação e pontos visados distintos
     if est1 != est2:
         return None
     if pv1 == pv2:
         return None
 
     est = est1
-    b = float(r1["DH_med_m"])
-    c = float(r2["DH_med_m"])
+
+    # Distâncias horizontais médias (lados a partir da estação)
+    AB = float(r1["DH_med_m"])  # EST–PV1
+    AC = float(r2["DH_med_m"])  # EST–PV2
+
+    # Direções médias (em graus)
     hz1 = float(r1["Hz_med_deg"])
     hz2 = float(r2["Hz_med_deg"])
 
-    alpha_deg = (hz2 - hz1) % 360.0
-    if alpha_deg > 180.0:
-        alpha_deg = 360.0 - alpha_deg
+    # Ângulo no vértice A (EST) entre as direções EST–PV1 e EST–PV2
+    ang_A_deg = (hz2 - hz1) % 360.0
+    if ang_A_deg > 180.0:
+        ang_A_deg = 360.0 - ang_A_deg
 
-    a = math.sqrt(
-        b**2 + c**2 - 2 * b * c * math.cos(math.radians(alpha_deg))
+    # Lado BC pela lei dos cossenos (oposto ao ângulo em A)
+    BC = math.sqrt(
+        AB**2 + AC**2 - 2 * AB * AC * math.cos(math.radians(ang_A_deg))
     )
 
-    ang_P1 = _angulo_interno(b, c, a)
-    ang_P2 = _angulo_interno(a, b, c)
-    ang_P3 = _angulo_interno(c, a, b)
+    # Agora calculamos os outros ângulos internos:
+    #   - ang_B_deg é o ângulo em B (PV1), oposto ao lado AC
+    #   - ang_C_deg é o ângulo em C (PV2), oposto ao lado AB
+    ang_B_deg = _angulo_interno(AC, AB, BC)
+    ang_C_deg = _angulo_interno(AB, AC, BC)
 
-    s = (a + b + c) / 2.0
-    area = math.sqrt(max(s * (s - a) * (s - b) * (s - c), 0.0))
+    # Área do triângulo (fórmula de Heron)
+    s = (AB + AC + BC) / 2.0
+    area = math.sqrt(max(s * (s - AB) * (s - AC) * (s - BC), 0.0))
 
-    return {
-        "EST": est,
-        "PV1": pv1,
-        "PV2": pv2,
-        "b_EST_PV1": b,
-        "c_EST_PV2": c,
-        "a_PV1_PV2": a,
-        "alpha_EST_deg": alpha_deg,
-        "ang_P1_deg": ang_P1,
-        "ang_P2_deg": ang_P2,
-        "ang_P3_deg": ang_P3,
+    info = {
+        "EST": est,      # vértice A
+        "PV1": pv1,      # vértice B
+        "PV2": pv2,      # vértice C
+        "AB": AB,        # EST–PV1
+        "AC": AC,        # EST–PV2
+        "BC": BC,        # PV1–PV2
+        "ang_A_deg": ang_A_deg,  # ângulo em A (EST)
+        "ang_B_deg": ang_B_deg,  # ângulo em B (PV1)
+        "ang_C_deg": ang_C_deg,  # ângulo em C (PV2)
         "area_m2": area,
     }
 
+    # Também devolvemos uma versão ordenada para clareza didática:
+    lados_ordenados = sorted(
+        [
+            ("AB", est, pv1, AB),
+            ("AC", est, pv2, AC),
+            ("BC", pv1, pv2, BC),
+        ],
+        key=lambda x: x[3],
+        reverse=True,  # do maior para o menor
+    )
+    angulos_ordenados = sorted(
+        [
+            ("A", est, ang_A_deg),
+            ("B", pv1, ang_B_deg),
+            ("C", pv2, ang_C_deg),
+        ],
+        key=lambda x: x[2],
+        reverse=True,
+    )
 
-def selecionar_linhas_por_estacao_e_conjunto(
-    res: pd.DataFrame, estacao_letra: str, conjunto: str
-) -> Optional[Tuple[int, int]]:
-    letra_to_p = {"A": "P1", "B": "P2", "C": "P3"}
-    est_ref = letra_to_p.get(estacao_letra)
-    if est_ref is None:
-        return None
+    info["lados_ordenados"] = lados_ordenados
+    info["angulos_ordenados"] = angulos_ordenados
 
-    ordem = {"1ª leitura": 1, "2ª leitura": 2, "3ª leitura": 3}[conjunto]
-
-    df = res.reset_index(drop=False).rename(columns={"index": "_idx_orig"})
-
-    if est_ref == "P1":  # Estação A
-        if ordem == 1:
-            mask = (df["EST"] == "P2") & (df["PV"].isin(["P3", "P1"]))
-        else:
-            mask = (df["EST"] == "P1") & (df["PV"].isin(["P2", "P3"]))
-    elif est_ref == "P2":  # Estação B
-        mask = (df["EST"] == "P2") & (df["PV"].isin(["P3", "P1"]))
-    else:  # P3, Estação C
-        mask = (df["EST"] == "P3") & (df["PV"].isin(["P1", "P2"]))
-
-    cand = df[mask].sort_values(by="_idx_orig")
-    if len(cand) < 2:
-        return None
-
-    cand = cand.reset_index(drop=True)
-    cand["par_id"] = cand.index // 2
-
-    par_desejado = ordem - 1
-    par = cand[cand["par_id"] == par_desejado]
-    if len(par) < 2:
-        return None
-
-    idxs = par["_idx_orig"].tolist()[:2]
-    return int(idxs[0]), int(idxs[1])
+    return info
 
 
 # ---------------------------------------------------------------------
