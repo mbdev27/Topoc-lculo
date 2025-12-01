@@ -444,7 +444,7 @@ def pagina_processamento():
         unsafe_allow_html=True,
     )
 
-    info = None
+   info = None
     img_buf = None
 
     if st_local.button("Gerar triângulo"):
@@ -463,32 +463,46 @@ def pagina_processamento():
             else:
                 from plotting import plotar_triangulo_info, gerar_xlsx_com_figura
 
+                est = info["EST"]
+                pv1 = info["PV1"]
+                pv2 = info["PV2"]
+
                 st_local.markdown(
-                    f"<p><b>Triângulo formado automaticamente por {info['EST']}, "
-                    f"{info['PV1']} e {info['PV2']} ({conjunto_op} na Estação {estacao_op}).</b></p>",
+                    f"<p><b>Triângulo formado automaticamente por {est} (A), "
+                    f"{pv1} (B) e {pv2} (C) — {conjunto_op} na Estação {estacao_op}.</b></p>",
                     unsafe_allow_html=True,
                 )
 
+                # Lados e ângulos em ordem decrescente (didático)
+                lados_ord = info.get("lados_ordenados", [])
+                ang_ord = info.get("angulos_ordenados", [])
+
                 col1, col2 = st_local.columns(2)
                 with col1:
-                    st_local.markdown("**Lados (m):**")
+                    st_local.markdown("**Lados (m) – do maior para o menor:**")
+                    linhas_lados = []
+                    for rot, p_ini, p_fim, val in lados_ord:
+                        # rot é "AB", "AC" ou "BC"
+                        linhas_lados.append(
+                            f"- {p_ini}–{p_fim} ({rot}): ` {val:.3f} ` m"
+                        )
+                    st_local.markdown("\n".join(linhas_lados))
+
+                    st_local.markdown("**Ângulos internos – do maior para o menor:**")
+                    linhas_ang = []
+                    for rot, p_nome, val in ang_ord:
+                        linhas_ang.append(
+                            f"- Em {p_nome} ({rot}): ` {decimal_to_dms(val)} `"
+                        )
+                    st_local.markdown("\n".join(linhas_ang))
+
                     st_local.markdown(
-                        f"- {info['EST']}–{info['PV1']}: `{info['b_EST_PV1']:.3f}` m\n"
-                        f"- {info['EST']}–{info['PV2']}: `{info['c_EST_PV2']:.3f}` m\n"
-                        f"- {info['PV1']}–{info['PV2']}: `{info['a_PV1_PV2']:.3f}` m"
+                        f"**Área do triângulo:** ` {info['area_m2']:.3f} ` m²"
                     )
-                    st_local.markdown("**Ângulos internos:**")
-                    st_local.markdown(
-                        f"- Em P1: `{decimal_to_dms(info['ang_P1_deg'])}`\n"
-                        f"- Em P2: `{decimal_to_dms(info['ang_P2_deg'])}`\n"
-                        f"- Em P3: `{decimal_to_dms(info['ang_P3_deg'])}`"
-                    )
-                    st_local.markdown(
-                        f"**Área do triângulo:** `{info['area_m2']:.3f}` m²"
-                    )
+
                 with col2:
-                    img_buf, _ = plotar_triangulo_info(info)
-                    st_local.pyplot(_)
+                    img_buf, fig = plotar_triangulo_info(info)
+                    st_local.pyplot(fig)
 
                 xlsx_bytes = gerar_xlsx_com_figura(info, img_buf)
                 st_local.download_button(
@@ -497,7 +511,6 @@ def pagina_processamento():
                     file_name="triangulo_ufpe_resumo_figura.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
-
     st_local.markdown(
         """
         <p class="footer-text">
