@@ -11,55 +11,53 @@ import pandas as pd
 from processing import decimal_to_dms
 
 
+def _nome_para_ordem(ponto: str) -> int:
+    """Ordem cíclica P1 < P2 < P3 para organizar os rótulos em sentido horário."""
+    ordem = {"P1": 0, "P2": 1, "P3": 2}
+    return ordem.get(ponto, 99)
+
+
 def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
     """
     Desenha o triângulo em planta.
 
-    Conceito geométrico / didático:
-      - Pontos reais: P1, P2, P3.
-      - Letras didáticas: A=P1, B=P2, C=P3.
-
-    Usamos os comprimentos dos lados:
-      - AB ≡ P1–P2
-      - AC ≡ P1–P3
-      - BC ≡ P2–P3
-
-    Para manter a leitura visual, no caso específico de:
-      - Estação selecionada = A
-      - Conjunto de leituras = 1ª leitura
-    aplicamos uma reflexão no eixo X para evitar que o triângulo pareça
-    "de costas" para o observador.
+    - O vértice na origem (0,0) é SEMPRE o ponto real da estação usada nas leituras: info["EST"]
+      (pode ser P1, P2 ou P3).
+    - Os outros dois vértices são info["PV1"] e info["PV2"].
+    - Rótulos gráficos exibem apenas P1, P2 e P3 (sem letras A/B/C).
     """
-    # Pontos didáticos
-    A_ponto = "P1"
-    B_ponto = "P2"
-    C_ponto = "P3"
+    est = info["EST"]   # ponto estação (ex.: P1)
+    pv1 = info["PV1"]   # ponto visado 1 (P2 ou P3)
+    pv2 = info["PV2"]   # ponto visado 2 (P2 ou P3)
 
-    # Comprimentos dos lados
-    AB = info["AB"]  # interpretado como P1–P2
-    AC = info["AC"]  # interpretado como P1–P3
-    BC = info["BC"]  # interpretado como P2–P3
+    # Comprimentos dos lados tal como calculados
+    AB = info["AB"]  # EST–PV1
+    AC = info["AC"]  # EST–PV2
+    BC = info["BC"]  # PV1–PV2
 
-    # Coordenadas base: colocamos A (P1) na origem e C (P3) sobre o eixo X.
-    x_A, y_A = 0.0, 0.0
-    x_C, y_C = AC, 0.0
+    # Colocamos a estação EST na origem (0,0) – PONTO DE VISTA
+    x_E, y_E = 0.0, 0.0
+    x_V2, y_V2 = AC, 0.0  # segundo visado em cima do eixo X
 
     if AC == 0:
-        x_B, y_B = AB, 0.0
+        x_V1, y_V1 = AB, 0.0
     else:
-        # Fórmulas clássicas para o terceiro vértice de um triângulo
-        x_B = (AB**2 - BC**2 + AC**2) / (2 * AC)
-        arg = max(AB**2 - x_B**2, 0.0)
-        y_B = math.sqrt(arg)
+        x_V1 = (AB**2 - BC**2 + AC**2) / (2 * AC)
+        arg = max(AB**2 - x_V1**2, 0.0)
+        y_V1 = math.sqrt(arg)
 
-    # ---------------------------------------------------------
-    # Caso especial: Estação A + 1ª leitura → refletir em X
-    # ---------------------------------------------------------
-    if estacao_op == "A" and conjunto_op == "1ª leitura":
-        x_A, x_B, x_C = -x_A, -x_B, -x_C
+    # Ordena os dois visados para uma leitura visual mais natural:
+    # queremos que, ao girar no sentido horário, eles sigam a sequência P1,P2,P3.
+    visados = [
+        ("pv1", pv1, x_V1, y_V1),
+        ("pv2", pv2, x_V2, y_V2),
+    ]
+    visados.sort(key=lambda t: _nome_para_ordem(t[1]))
 
-    xs = [x_A, x_B, x_C, x_A]
-    ys = [y_A, y_B, y_C, y_A]
+    (tag1, nome1, x1, y1), (tag2, nome2, x2, y2) = visados
+
+    xs = [x_E, x1, x2, x_E]
+    ys = [y_E, y1, y2, y_E]
 
     fig, ax = plt.subplots()
     ax.plot(xs, ys, "-o", color="#7f0000")
@@ -67,30 +65,33 @@ def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
     fig.patch.set_facecolor("#ffffff")
     ax.set_aspect("equal", "box")
 
-    # Rótulos dos vértices com letras e pontos reais
-    ax.text(x_A, y_A, f"{A_ponto} (A)", fontsize=10, color="#111827")
-    ax.text(x_B, y_B, f"{B_ponto} (B)", fontsize=10, color="#111827")
-    ax.text(x_C, y_C, f"{C_ponto} (C)", fontsize=10, color="#111827")
+    # Rótulos: APENAS nomes P1, P2, P3, sem letras entre parênteses
+    ax.text(x_E, y_E, f"{est}", fontsize=10, color="#111827")
+    ax.text(x1, y1, f"{nome1}", fontsize=10, color="#111827")
+    ax.text(x2, y2, f"{nome2}", fontsize=10, color="#111827")
 
-    # Rótulos dos lados no meio dos segmentos
+    # Descobrir qual lado é qual, usando nomes dos pontos
+    # Lado estação–pv1
     ax.text(
-        (x_A + x_B) / 2,
-        (y_A + y_B) / 2,
-        f"AB = {AB:.3f} m",
+        (x_E + x1) / 2,
+        (y_E + y1) / 2,
+        f"{est}–{nome1} = {AB:.3f} m",
         color="#374151",
         fontsize=9,
     )
+    # Lado estação–pv2
     ax.text(
-        (x_A + x_C) / 2,
-        (y_A + y_C) / 2,
-        f"AC = {AC:.3f} m",
+        (x_E + x2) / 2,
+        (y_E + y2) / 2,
+        f"{est}–{nome2} = {AC:.3f} m",
         color="#374151",
         fontsize=9,
     )
+    # Lado pv1–pv2
     ax.text(
-        (x_B + x_C) / 2,
-        (y_B + y_C) / 2,
-        f"BC = {BC:.3f} m",
+        (x1 + x2) / 2,
+        (y1 + y2) / 2,
+        f"{nome1}–{nome2} = {BC:.3f} m",
         color="#374151",
         fontsize=9,
     )
@@ -100,7 +101,7 @@ def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
     ax.tick_params(colors="#111827")
     ax.grid(True, linestyle="--", alpha=0.3, color="#9ca3af")
     ax.set_title(
-        "Representação do triângulo em planta (A=P1, B=P2, C=P3)",
+        "Representação do triângulo em planta (ponto de vista na estação)",
         color="#111827",
     )
 
@@ -122,12 +123,12 @@ def gerar_xlsx_com_figura(info_triangulo: Dict, figura_buf: io.BytesIO) -> bytes
         df_resumo = pd.DataFrame(
             {
                 "Descrição": [
-                    "Lado A–B (P1–P2)",
-                    "Lado A–C (P1–P3)",
-                    "Lado B–C (P2–P3)",
-                    "Ângulo interno em A (P1)",
-                    "Ângulo interno em B (P2)",
-                    "Ângulo interno em C (P3)",
+                    "Lado estação–PV1",
+                    "Lado estação–PV2",
+                    "Lado PV1–PV2",
+                    "Ângulo interno na estação",
+                    "Ângulo interno no PV1",
+                    "Ângulo interno no PV2",
                     "Área do triângulo (m²)",
                 ],
                 "Valor": [
