@@ -15,12 +15,12 @@ def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
     """
     Desenha o triângulo em planta.
 
-    - O vértice na origem (0,0) é SEMPRE o ponto da estação real info["EST"]
-      (P1, P2 ou P3), ou seja, o ponto de vista do observador em campo.
-    - Os outros dois vértices são PV1 e PV2.
-    - Rótulos mostram apenas P1, P2 e P3 (sem A/B/C).
+    - O vértice em (0,0) é info["EST"] (P1, P2 ou P3),
+      já definido em processing.calcular_triangulo_duas_linhas.
+    - Os outros vértices são PV1 e PV2.
+    - Rótulos apenas P1, P2, P3.
     """
-    est = info["EST"]   # estação (P1, P2 ou P3)
+    est = info["EST"]
     pv1 = info["PV1"]
     pv2 = info["PV2"]
 
@@ -28,7 +28,6 @@ def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
     AC = info["AC"]  # EST–PV2
     BC = info["BC"]  # PV1–PV2
 
-    # Estação na origem
     x_E, y_E = 0.0, 0.0
     x_V2, y_V2 = AC, 0.0  # segundo visado no eixo X
 
@@ -39,15 +38,6 @@ def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
         arg = max(AB**2 - x_V1**2, 0.0)
         y_V1 = math.sqrt(arg)
 
-    # Caso especial: usuário escolheu Estação A (P1) e 1ª leitura
-    # Queremos garantir que o P1 (estação) está na base esquerda
-    # (já está em (0,0)), e a figura "abre" para a direita.
-    # Se, por algum motivo, os dois visados ficaram com X negativos,
-    # espelhamos no eixo Y.
-    if estacao_op == "A" and conjunto_op == "1ª leitura":
-        if x_V1 < 0 and x_V2 < 0:
-            x_V1, x_V2 = -x_V1, -x_V2
-
     xs = [x_E, x_V1, x_V2, x_E]
     ys = [y_E, y_V1, y_V2, y_E]
 
@@ -57,12 +47,10 @@ def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
     fig.patch.set_facecolor("#ffffff")
     ax.set_aspect("equal", "box")
 
-    # Rótulos: somente P1, P2, P3
     ax.text(x_E, y_E, f"{est}", fontsize=10, color="#111827")
     ax.text(x_V1, y_V1, f"{pv1}", fontsize=10, color="#111827")
     ax.text(x_V2, y_V2, f"{pv2}", fontsize=10, color="#111827")
 
-    # Lados
     ax.text(
         (x_E + x_V1) / 2,
         (y_E + y_V1) / 2,
@@ -103,7 +91,7 @@ def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
 
 def gerar_xlsx_com_figura(info_triangulo: Dict, figura_buf: io.BytesIO) -> bytes:
     """
-    Gera um arquivo XLSX com um resumo numérico do triângulo e a figura em outra aba.
+    Gera um XLSX com resumo numérico e a figura do triângulo.
     """
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
