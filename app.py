@@ -302,7 +302,6 @@ def pagina_carregar_dados():
     cols_use = [c for c in REQUIRED_COLS_ALL if c in df_valid.columns]
     df_uso = df_valid[cols_use].copy()
 
-    # Guarda em sessão e oferece botão para ir à página de processamento
     st.session_state["df_uso"] = df_uso
     st.session_state["info_id"] = info_id
 
@@ -327,10 +326,8 @@ def pagina_processamento():
     df_uso = st.session_state["df_uso"]
     info_id = st.session_state["info_id"]
 
-    # Cabeçalho SEMPRE no topo desta página
     cabecalho_ufpe(info_id)
 
-    # A partir daqui, seguem as seções 3 a 7
     st_local = st
 
     # 3. Cálculo linha a linha
@@ -432,9 +429,6 @@ def pagina_processamento():
         unsafe_allow_html=True,
     )
 
-    info = None
-    img_buf = None
-
     if st_local.button("Gerar triângulo"):
         pares = selecionar_linhas_por_estacao_e_conjunto(res, estacao_op, conjunto_op)
         if pares is None:
@@ -456,18 +450,17 @@ def pagina_processamento():
                 pv2 = info["PV2"]
 
                 st_local.markdown(
-                    f"<p><b>Triângulo formado automaticamente pelos pontos P1, P2 e P3 "
+                    f"<p><b>Triângulo formado automaticamente por {est}, {pv1} e {pv2} "
                     f"(conjunto: {conjunto_op}, estação selecionada: {estacao_op}).</b></p>",
                     unsafe_allow_html=True,
                 )
 
-                # Lados e ângulos em ordem decrescente (A=P1, B=P2, C=P3)
                 lados_ord = info.get("lados_ordenados", [])
                 ang_ord = info.get("angulos_ordenados", [])
 
                 col1, col2 = st_local.columns(2)
                 with col1:
-                    st_local.markdown("**Lados (m) – do maior para o menor (A=P1, B=P2, C=P3):**")
+                    st_local.markdown("**Lados (m) – do maior para o menor:**")
                     linhas_lados = []
                     for rot, p_ini, p_fim, val in lados_ord:
                         linhas_lados.append(
@@ -475,7 +468,7 @@ def pagina_processamento():
                         )
                     st_local.markdown("\n".join(linhas_lados))
 
-                    st_local.markdown("**Ângulos internos – do maior para o menor (A=P1, B=P2, C=P3):**")
+                    st_local.markdown("**Ângulos internos – do maior para o menor:**")
                     linhas_ang = []
                     for letra, p_nome, val in ang_ord:
                         linhas_ang.append(
@@ -502,9 +495,8 @@ def pagina_processamento():
     st_local.markdown(
         """
         <p class="footer-text">
-            Versão do app: <code>UFPE_v18 — A=P1, B=P2, C=P3; triângulo em duas páginas
-            (upload → processamento), cabeçalho sempre no topo da página de processamento,
-            correção de orientação gráfica para Estação A / 1ª leitura.</code>
+            Versão do app: <code>UFPE_v19 — ponto de vista no ponto da estação (P1/P2/P3),
+            croqui rotulado apenas com P1, P2, P3; fluxo em duas páginas.</code>
         </p>
         """,
         unsafe_allow_html=True,
