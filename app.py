@@ -246,7 +246,6 @@ def pagina_carregar_dados():
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    # Tenta ler o Excel
     try:
         xls = pd.ExcelFile(uploaded)
 
@@ -403,7 +402,7 @@ def pagina_processamento():
     resumo = tabela_resumo_final(res, renomear_para_letras=True)
     st_local.dataframe(resumo, use_container_width=True)
 
-    # 7. TRIÂNGULO SELECIONADO (CONJUNTO AUTOMÁTICO DE MEDIÇÕES)
+    # 7. TRIÂNGULO SELECIONADO
     st_local.markdown(
         """
         <div class="section-title">
@@ -450,7 +449,7 @@ def pagina_processamento():
                 pv2 = info["PV2"]
 
                 st_local.markdown(
-                    f"<p><b>Triângulo formado automaticamente por {est}, {pv1} e {pv2} "
+                    f"<p><b>Triângulo formado automaticamente pelos pontos {est}, {pv1} e {pv2} "
                     f"(conjunto: {conjunto_op}, estação selecionada: {estacao_op}).</b></p>",
                     unsafe_allow_html=True,
                 )
@@ -495,8 +494,8 @@ def pagina_processamento():
     st_local.markdown(
         """
         <p class="footer-text">
-            Versão do app: <code>UFPE_v19 — ponto de vista no ponto da estação (P1/P2/P3),
-            croqui rotulado apenas com P1, P2, P3; fluxo em duas páginas.</code>
+            Versão do app: <code>UFPE_v20 — triângulo com ponto de vista na estação real (P1/P2/P3),
+            croqui sem letras A/B/C nos vértices, ajuste para Estação A / 1ª leitura com P1 na base esquerda.</code>
         </p>
         """,
         unsafe_allow_html=True,
