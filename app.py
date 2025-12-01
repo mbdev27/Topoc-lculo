@@ -11,7 +11,6 @@ from processing import (
     calcular_linha_a_linha,
     tabela_hz_por_serie,
     tabela_z_por_serie,
-    tabela_distancias_medias_simetricas,
     tabela_resumo_final,
     selecionar_linhas_por_estacao_e_conjunto,
     calcular_triangulo_duas_linhas,
@@ -452,36 +451,35 @@ def pagina_processamento():
                     "Falha ao calcular o triângulo a partir das leituras selecionadas."
                 )
             else:
-                est = info["EST"]   # vértice A
-                pv1 = info["PV1"]   # vértice B
-                pv2 = info["PV2"]   # vértice C
+                est = info["EST"]
+                pv1 = info["PV1"]
+                pv2 = info["PV2"]
 
                 st_local.markdown(
-                    f"<p><b>Triângulo formado automaticamente por {est} (A), "
-                    f"{pv1} (B) e {pv2} (C) — {conjunto_op} na Estação {estacao_op}.</b></p>",
+                    f"<p><b>Triângulo formado automaticamente pelos pontos P1, P2 e P3 "
+                    f"(conjunto: {conjunto_op}, estação selecionada: {estacao_op}).</b></p>",
                     unsafe_allow_html=True,
                 )
 
-                # Lados e ângulos em ordem decrescente para clareza didática
+                # Lados e ângulos em ordem decrescente (A=P1, B=P2, C=P3)
                 lados_ord = info.get("lados_ordenados", [])
                 ang_ord = info.get("angulos_ordenados", [])
 
                 col1, col2 = st_local.columns(2)
                 with col1:
-                    st_local.markdown("**Lados (m) – do maior para o menor:**")
+                    st_local.markdown("**Lados (m) – do maior para o menor (A=P1, B=P2, C=P3):**")
                     linhas_lados = []
                     for rot, p_ini, p_fim, val in lados_ord:
-                        # rot é "AB", "AC" ou "BC"
                         linhas_lados.append(
                             f"- {p_ini}–{p_fim} ({rot}): ` {val:.3f} ` m"
                         )
                     st_local.markdown("\n".join(linhas_lados))
 
-                    st_local.markdown("**Ângulos internos – do maior para o menor:**")
+                    st_local.markdown("**Ângulos internos – do maior para o menor (A=P1, B=P2, C=P3):**")
                     linhas_ang = []
-                    for rot, p_nome, val in ang_ord:
+                    for letra, p_nome, val in ang_ord:
                         linhas_ang.append(
-                            f"- Em {p_nome} ({rot}): ` {decimal_to_dms(val)} `"
+                            f"- Em {p_nome} ({letra}): ` {decimal_to_dms(val)} `"
                         )
                     st_local.markdown("\n".join(linhas_ang))
 
@@ -490,7 +488,7 @@ def pagina_processamento():
                     )
 
                 with col2:
-                    img_buf, fig = plotar_triangulo_info(info)
+                    img_buf, fig = plotar_triangulo_info(info, estacao_op, conjunto_op)
                     st_local.pyplot(fig)
 
                 xlsx_bytes = gerar_xlsx_com_figura(info, img_buf)
@@ -504,9 +502,9 @@ def pagina_processamento():
     st_local.markdown(
         """
         <p class="footer-text">
-            Versão do app: <code>UFPE_v17 — fluxo em duas páginas (upload → processamento),
-            cabeçalho sempre no topo da página de processamento, triângulo com vértices A (EST),
-            B (PV1), C (PV2), lados e ângulos exibidos em ordem decrescente.</code>
+            Versão do app: <code>UFPE_v18 — A=P1, B=P2, C=P3; triângulo em duas páginas
+            (upload → processamento), cabeçalho sempre no topo da página de processamento,
+            correção de orientação gráfica para Estação A / 1ª leitura.</code>
         </p>
         """,
         unsafe_allow_html=True,
