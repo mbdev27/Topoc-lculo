@@ -1,55 +1,104 @@
 # utils.py
-# Funções auxiliares (identificação e formatação de data)
+# Funções auxiliares (identificação, etc.)
 
 import pandas as pd
-from typing import Dict
+from datetime import datetime
 
 
-def format_data_ddmmaaaa(raw) -> str:
-    if raw is None or str(raw).strip() == "":
+def _parse_data_flex(valor):
+    """
+    Tenta interpretar 'valor' como data e devolver string no formato DD/MM/AAAA.
+    Retorna string vazia se não conseguir interpretar.
+    """
+    if pd.isna(valor):
         return ""
-    s = str(raw).strip()
+
+    # Se já vier como datetime
+    if isinstance(valor, (datetime, pd.Timestamp)):
+        return valor.strftime("%d/%m/%Y")
+
+    s = str(valor).strip()
+    if s == "":
+        return ""
+
+    # Se já estiver no formato DD/MM/AAAA, apenas normaliza
+    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y/%m/%d"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.strftime("%d/%m/%Y")
+        except Exception:
+            pass
+
+    # Última tentativa: deixar o pandas tentar
     try:
-        dt = pd.to_datetime(raw)
+        dt = pd.to_datetime(s, dayfirst=True, errors="coerce")
+        if pd.isna(dt):
+            return ""
         return dt.strftime("%d/%m/%Y")
     except Exception:
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
-            try:
-                dt = pd.to_datetime(s, format=fmt)
-                return dt.strftime("%d/%m/%Y")
-            except Exception:
-                continue
-    return s
+        return ""
 
 
-def ler_identificacao_from_df(df_id: pd.DataFrame) -> Dict[str, str]:
-    id_map = {
+def ler_identificacao_from_df(df_id: pd.DataFrame):
+    """
+    Lê a aba 'Identificação' do Excel no padrão:
+
+        Campo | Valor
+        ------+------
+        Professor(a) | ...
+        Equipamento  | ...
+        Dados        | ...
+        Local        | ...
+        Patrimônio   | ...
+
+    Mas é tolerante a pequenas variações de nomes.
+    Retorna um dicionário com as chaves:
+      'Professor(a)', 'Equipamento', 'Dados', 'Local', 'Patrimônio'
+    em que 'Dados' é sempre string 'DD/MM/AAAA' (se reconhecida) ou ''.
+    """
+    info = {
         "Professor(a)": "",
         "Equipamento": "",
-        "Data": "",
+        "Dados": "",
         "Local": "",
         "Patrimônio": "",
     }
-    if df_id is None or df_id.empty:
-        return id_map
 
-    campo_col = None
-    valor_col = None
-    for c in df_id.columns:
-        if c.strip().lower() in ["campo", "campos"]:
-            campo_col = c
-        if c.strip().lower() in ["valor", "valores"]:
-            valor_col = c
-    if campo_col is None or valor_col is None:
-        return id_map
+    if df_id is None or df_id.empty:
+        return info
+
+    # Normaliza nomes das colunas
+    cols_lower = [str(c).strip().lower() for c in df_id.columns]
+    col_campo = None
+    col_valor = None
+    for i, c in enumerate(cols_lower):
+        if c in ["campo", "descricao", "descrição", "item"]:
+            col_campo = df_id.columns[i]
+        if c in ["valor", "valores", "dado"]:
+            col_valor = df_id.columns[i]
+
+    # Se não encontrar o padrão "Campo/Valor", tenta usar primeira/segunda colunas
+    if col_campo is None:
+        col_campo = df_id.columns[0]
+    if col_valor is None:
+        if len(df_id.columns) > 1:
+            col_valor = df_id.columns[1]
+        else:
+            col_valor = df_id.columns[0]
 
     for _, row in df_id.iterrows():
-        campo = str(row[campo_col]).strip()
-        val_raw = row[valor_col]
-        if campo == "Data":
-            val = format_data_ddmmaaaa(val_raw)
-        else:
-            val = "" if pd.isna(val_raw) else str(val_raw).strip()
-        if campo in id_map:
-            id_map[campo] = val
-    return id_map
+        campo = str(row.get(col_campo, "")).strip().lower()
+        valor = row.get(col_valor, "")
+
+        if "professor" in campo:
+            info["Professor(a)"] = str(valor).strip()
+        elif "equip" in campo:
+            info["Equipamento"] = str(valor).strip()
+        elif campo in ["data", "dados", "data dos dados"]:
+            info["Dados"] = _parse_data_flex(valor)
+        elif "local" in campo:
+            info["Local"] = str(valor).strip()
+        elif ("patrim" in campo) or ("tomb" in campo):
+            info["Patrimônio"] = str(valor).strip()
+
+    return info
