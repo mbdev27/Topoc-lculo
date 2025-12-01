@@ -11,41 +11,52 @@ import pandas as pd
 from processing import decimal_to_dms
 
 
-def plotar_triangulo_info(info: Dict):
+def plotar_triangulo_info(info: Dict, estacao_op: str, conjunto_op: str):
     """
-    Desenha o triângulo em planta usando a convenção:
+    Desenha o triângulo em planta.
 
-      - A: EST
-      - B: PV1
-      - C: PV2
+    Conceito geométrico / didático:
+      - Pontos reais: P1, P2, P3.
+      - Letras didáticas: A=P1, B=P2, C=P3.
 
-    Com coordenadas:
-      - A em (0, 0)
-      - C em (AC, 0)
-      - B calculado via lei dos cossenos a partir dos lados AB, AC, BC.
+    Usamos os comprimentos dos lados:
+      - AB ≡ P1–P2
+      - AC ≡ P1–P3
+      - BC ≡ P2–P3
 
-    Isso garante que o ponto de vista de onde parte o desenho é a estação (A/B/C).
+    Para manter a leitura visual, no caso específico de:
+      - Estação selecionada = A
+      - Conjunto de leituras = 1ª leitura
+    aplicamos uma reflexão no eixo X para evitar que o triângulo pareça
+    "de costas" para o observador.
     """
-    A = info["EST"]
-    B = info["PV1"]
-    C = info["PV2"]
+    # Pontos didáticos
+    A_ponto = "P1"
+    B_ponto = "P2"
+    C_ponto = "P3"
 
-    AB = info["AB"]
-    AC = info["AC"]
-    BC = info["BC"]
+    # Comprimentos dos lados
+    AB = info["AB"]  # interpretado como P1–P2
+    AC = info["AC"]  # interpretado como P1–P3
+    BC = info["BC"]  # interpretado como P2–P3
 
-    # Coordenadas em planta
+    # Coordenadas base: colocamos A (P1) na origem e C (P3) sobre o eixo X.
     x_A, y_A = 0.0, 0.0
     x_C, y_C = AC, 0.0
 
     if AC == 0:
-        # Caso degenerado: colocamos B na mesma linha de C
         x_B, y_B = AB, 0.0
     else:
-        # Fórmulas clássicas de coordenadas para o terceiro vértice
+        # Fórmulas clássicas para o terceiro vértice de um triângulo
         x_B = (AB**2 - BC**2 + AC**2) / (2 * AC)
         arg = max(AB**2 - x_B**2, 0.0)
         y_B = math.sqrt(arg)
+
+    # ---------------------------------------------------------
+    # Caso especial: Estação A + 1ª leitura → refletir em X
+    # ---------------------------------------------------------
+    if estacao_op == "A" and conjunto_op == "1ª leitura":
+        x_A, x_B, x_C = -x_A, -x_B, -x_C
 
     xs = [x_A, x_B, x_C, x_A]
     ys = [y_A, y_B, y_C, y_A]
@@ -56,10 +67,10 @@ def plotar_triangulo_info(info: Dict):
     fig.patch.set_facecolor("#ffffff")
     ax.set_aspect("equal", "box")
 
-    # Rótulos dos vértices
-    ax.text(x_A, y_A, f"{A} (A)", fontsize=10, color="#111827")
-    ax.text(x_B, y_B, f"{B} (B)", fontsize=10, color="#111827")
-    ax.text(x_C, y_C, f"{C} (C)", fontsize=10, color="#111827")
+    # Rótulos dos vértices com letras e pontos reais
+    ax.text(x_A, y_A, f"{A_ponto} (A)", fontsize=10, color="#111827")
+    ax.text(x_B, y_B, f"{B_ponto} (B)", fontsize=10, color="#111827")
+    ax.text(x_C, y_C, f"{C_ponto} (C)", fontsize=10, color="#111827")
 
     # Rótulos dos lados no meio dos segmentos
     ax.text(
@@ -89,7 +100,7 @@ def plotar_triangulo_info(info: Dict):
     ax.tick_params(colors="#111827")
     ax.grid(True, linestyle="--", alpha=0.3, color="#9ca3af")
     ax.set_title(
-        "Representação do triângulo em planta (ponto de vista na estação A/B/C)",
+        "Representação do triângulo em planta (A=P1, B=P2, C=P3)",
         color="#111827",
     )
 
@@ -111,12 +122,12 @@ def gerar_xlsx_com_figura(info_triangulo: Dict, figura_buf: io.BytesIO) -> bytes
         df_resumo = pd.DataFrame(
             {
                 "Descrição": [
-                    "Lado A–B (EST–PV1)",
-                    "Lado A–C (EST–PV2)",
-                    "Lado B–C (PV1–PV2)",
-                    "Ângulo interno em A (EST)",
-                    "Ângulo interno em B (PV1)",
-                    "Ângulo interno em C (PV2)",
+                    "Lado A–B (P1–P2)",
+                    "Lado A–C (P1–P3)",
+                    "Lado B–C (P2–P3)",
+                    "Ângulo interno em A (P1)",
+                    "Ângulo interno em B (P2)",
+                    "Ângulo interno em C (P3)",
                     "Área do triângulo (m²)",
                 ],
                 "Valor": [
