@@ -133,7 +133,7 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 def cabecalho_ufpe(info_id):
     prof = info_id.get("Professor(a)", "")
     equip = info_id.get("Equipamento", "")
-    data = info_id.get("Dados", "")
+    data_str = info_id.get("Dados", "")  # já vem como DD/MM/AAAA ou ''
     local = info_id.get("Local", "")
     patr = info_id.get("Patrimônio", "")
 
@@ -162,7 +162,7 @@ def cabecalho_ufpe(info_id):
             "Disciplina: Equipamentos de Medição<br>"
             f"{linha('Professor(a)', prof)}"
             f"{linha('Equipamento', equip)}"
-            f"{linha('Data', data)}"
+            f"{linha('Data', data_str)}"
             f"{linha('Local', local)}"
             f"{linha('Patrimônio', patr)}"
             "</div>"
@@ -495,7 +495,8 @@ def pagina_processamento():
         """
         <p class="footer-text">
             Versão do app: <code>UFPE_v21 — triângulo com ponto de vista na estação real (P1/P2/P3),
-            croqui sem letras A/B/C nos vértices, caso especial Estação A / 1ª leitura com P1 na base esquerda (0,0).</code>
+            croqui sem letras A/B/C nos vértices, caso especial Estação A / 1ª leitura com P1 na base esquerda (0,0),
+            cabeçalho com data em formato DD/MM/AAAA.</code>
         </p>
         """,
         unsafe_allow_html=True,
