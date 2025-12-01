@@ -13,7 +13,7 @@ def _parse_data_flex(valor):
     if pd.isna(valor):
         return ""
 
-    # Se já vier como datetime
+    # Se já vier como datetime / Timestamp (excel normal)
     if isinstance(valor, (datetime, pd.Timestamp)):
         return valor.strftime("%d/%m/%Y")
 
@@ -21,8 +21,16 @@ def _parse_data_flex(valor):
     if s == "":
         return ""
 
-    # Se já estiver no formato DD/MM/AAAA, apenas normaliza
-    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y/%m/%d"):
+    # Tenta formatos comuns manualmente
+    formatos = [
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%d/%m/%y",
+        "%d-%m-%y",
+    ]
+    for fmt in formatos:
         try:
             dt = datetime.strptime(s, fmt)
             return dt.strftime("%d/%m/%Y")
@@ -41,7 +49,7 @@ def _parse_data_flex(valor):
 
 def ler_identificacao_from_df(df_id: pd.DataFrame):
     """
-    Lê a aba 'Identificação' do Excel no padrão:
+    Lê a aba 'Identificação' do Excel no padrão flexível:
 
         Campo | Valor
         ------+------
@@ -52,9 +60,11 @@ def ler_identificacao_from_df(df_id: pd.DataFrame):
         Patrimônio   | ...
 
     Mas é tolerante a pequenas variações de nomes.
+
     Retorna um dicionário com as chaves:
       'Professor(a)', 'Equipamento', 'Dados', 'Local', 'Patrimônio'
-    em que 'Dados' é sempre string 'DD/MM/AAAA' (se reconhecida) ou ''.
+
+    Em que 'Dados' é sempre string 'DD/MM/AAAA' (se reconhecida) ou ''.
     """
     info = {
         "Professor(a)": "",
@@ -67,24 +77,21 @@ def ler_identificacao_from_df(df_id: pd.DataFrame):
     if df_id is None or df_id.empty:
         return info
 
-    # Normaliza nomes das colunas
+    # Normaliza nomes das colunas para localizar "Campo" e "Valor"
     cols_lower = [str(c).strip().lower() for c in df_id.columns]
     col_campo = None
     col_valor = None
     for i, c in enumerate(cols_lower):
-        if c in ["campo", "descricao", "descrição", "item"]:
+        if c in ["campo", "campos", "descricao", "descrição", "item"]:
             col_campo = df_id.columns[i]
         if c in ["valor", "valores", "dado"]:
             col_valor = df_id.columns[i]
 
-    # Se não encontrar o padrão "Campo/Valor", tenta usar primeira/segunda colunas
+    # Se não encontrar, assume primeira e segunda colunas como Campo/Valor
     if col_campo is None:
         col_campo = df_id.columns[0]
     if col_valor is None:
-        if len(df_id.columns) > 1:
-            col_valor = df_id.columns[1]
-        else:
-            col_valor = df_id.columns[0]
+        col_valor = df_id.columns[1] if len(df_id.columns) > 1 else df_id.columns[0]
 
     for _, row in df_id.iterrows():
         campo = str(row.get(col_campo, "")).strip().lower()
@@ -94,7 +101,7 @@ def ler_identificacao_from_df(df_id: pd.DataFrame):
             info["Professor(a)"] = str(valor).strip()
         elif "equip" in campo:
             info["Equipamento"] = str(valor).strip()
-        elif campo in ["data", "dados", "data dos dados"]:
+        elif campo in ["data", "dados", "data dos dados", "data da atividade"]:
             info["Dados"] = _parse_data_flex(valor)
         elif "local" in campo:
             info["Local"] = str(valor).strip()
