@@ -438,7 +438,7 @@ def pagina_processamento():
             )
         else:
             idx1, idx2 = pares
-            info = calcular_triangulo_duas_linhas(res, idx1, idx2)
+            info = calcular_triangulo_duas_linhas(res, idx1, idx2, estacao_op, conjunto_op)
             if info is None:
                 st_local.error(
                     "Falha ao calcular o triângulo a partir das leituras selecionadas."
@@ -494,8 +494,8 @@ def pagina_processamento():
     st_local.markdown(
         """
         <p class="footer-text">
-            Versão do app: <code>UFPE_v20 — triângulo com ponto de vista na estação real (P1/P2/P3),
-            croqui sem letras A/B/C nos vértices, ajuste para Estação A / 1ª leitura com P1 na base esquerda.</code>
+            Versão do app: <code>UFPE_v21 — triângulo com ponto de vista na estação real (P1/P2/P3),
+            croqui sem letras A/B/C nos vértices, caso especial Estação A / 1ª leitura com P1 na base esquerda (0,0).</code>
         </p>
         """,
         unsafe_allow_html=True,
