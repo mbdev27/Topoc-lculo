@@ -461,22 +461,9 @@ def _angulo_interno(a: float, b: float, c: float) -> float:
 
 def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> Optional[Dict]:
     """
-    A partir de duas linhas (idx1 e idx2) de 'res' que compartilham a mesma estação (EST),
-    constrói o triângulo cujos vértices são:
-
-      - ponto da estação (est)
-      - primeiro ponto visado (pv1)
-      - segundo ponto visado (pv2)
-
-    Lados:
-      - AB = DH_med da linha 1 (EST–PV1)
-      - AC = DH_med da linha 2 (EST–PV2)
-      - BC = calculado pela lei dos cossenos
-
-    Os ângulos internos são:
-      - ang_A_deg → ângulo no vértice EST
-      - ang_B_deg → ângulo no vértice PV1
-      - ang_C_deg → ângulo no vértice PV2
+    Usa duas linhas de 'res' com mesma EST e PV distintos para montar o triângulo:
+      - EST é o vértice da estação (ponto de vista);
+      - PV1 e PV2 são os outros dois vértices.
     """
     if idx1 == idx2:
         return None
@@ -529,7 +516,6 @@ def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> O
         "area_m2": area,
     }
 
-    # Mapeamento didático A=P1, B=P2, C=P3 para listar lados/ângulos
     mapa_p_letra = {"P1": "A", "P2": "B", "P3": "C"}
 
     lados_reais = [
@@ -571,9 +557,8 @@ def selecionar_linhas_por_estacao_e_conjunto(
     res: pd.DataFrame, estacao_letra: str, conjunto: str
 ) -> Optional[Tuple[int, int]]:
     """
-    Seleciona automaticamente duas linhas de 'res' que formam um par válido
-    para o triângulo, de acordo com a estação (A, B, C) e o conjunto de
-    leituras (1ª, 2ª, 3ª).
+    Seleciona automaticamente duas linhas de 'res' para o triângulo, conforme
+    estação (A,B,C) e conjunto (1ª,2ª,3ª).
     """
     letra_to_p = {"A": "P1", "B": "P2", "C": "P3"}
     est_ref = letra_to_p.get(estacao_letra)
