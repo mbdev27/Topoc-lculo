@@ -1,37 +1,52 @@
 # plotting.py
-# Funções de plotagem e exportação
 
 import io
 import math
 from typing import Dict
 
 import matplotlib.pyplot as plt
-import pandas as pd
 
 from processing import decimal_to_dms
 
 
 def plotar_triangulo_info(info: Dict):
-    est = info["EST"]
-    pv1 = info["PV1"]
-    pv2 = info["PV2"]
+    """
+    Desenha o triângulo em planta usando a convenção:
 
-    b = info["b_EST_PV1"]
-    c = info["c_EST_PV2"]
-    a = info["a_PV1_PV2"]
+      - A: EST
+      - B: PV1
+      - C: PV2
 
-    x_est, y_est = 0.0, 0.0
-    x_pv2, y_pv2 = c, 0.0
+    Com coordenadas:
+      - A em (0, 0)
+      - C em (AC, 0)
+      - B calculado via lei dos cossenos a partir dos lados AB, AC, BC.
 
-    if c == 0:
-        x_pv1, y_pv1 = b, 0.0
+    Isso garante que o ponto de vista de onde parte o desenho é a estação (A).
+    """
+    A = info["EST"]
+    B = info["PV1"]
+    C = info["PV2"]
+
+    AB = info["AB"]
+    AC = info["AC"]
+    BC = info["BC"]
+
+    # Coordenadas em planta
+    x_A, y_A = 0.0, 0.0
+    x_C, y_C = AC, 0.0
+
+    if AC == 0:
+        # Caso degenerado: colocamos B na mesma linha de C
+        x_B, y_B = AB, 0.0
     else:
-        x_pv1 = (b**2 - a**2 + c**2) / (2 * c)
-        arg = max(b**2 - x_pv1**2, 0.0)
-        y_pv1 = math.sqrt(arg)
+        # Fórmulas clássicas de coordenadas para o terceiro vértice
+        x_B = (AB**2 - BC**2 + AC**2) / (2 * AC)
+        arg = max(AB**2 - x_B**2, 0.0)
+        y_B = math.sqrt(arg)
 
-    xs = [x_est, x_pv1, x_pv2, x_est]
-    ys = [y_est, y_pv1, y_pv2, y_est]
+    xs = [x_A, x_B, x_C, x_A]
+    ys = [y_A, y_B, y_C, y_A]
 
     fig, ax = plt.subplots()
     ax.plot(xs, ys, "-o", color="#7f0000")
@@ -39,63 +54,42 @@ def plotar_triangulo_info(info: Dict):
     fig.patch.set_facecolor("#ffffff")
     ax.set_aspect("equal", "box")
 
-    ax.text(x_est, y_est, f" {est}", fontsize=10, color="#111827")
-    ax.text(x_pv1, y_pv1, f" {pv1}", fontsize=10, color="#111827")
-    ax.text(x_pv2, y_pv2, f" {pv2}", fontsize=10, color="#111827")
+    # Rótulos dos vértices
+    ax.text(x_A, y_A, f"{A} (A)", fontsize=10, color="#111827")
+    ax.text(x_B, y_B, f"{B} (B)", fontsize=10, color="#111827")
+    ax.text(x_C, y_C, f"{C} (C)", fontsize=10, color="#111827")
 
-    ax.text((x_est + x_pv1) / 2, (y_est + y_pv1) / 2,
-            f"{b:.3f} m", color="#374151", fontsize=9)
-    ax.text((x_est + x_pv2) / 2, (y_est + y_pv2) / 2,
-            f"{c:.3f} m", color="#374151", fontsize=9)
-    ax.text((x_pv1 + x_pv2) / 2, (y_pv1 + y_pv2) / 2,
-            f"{a:.3f} m", color="#374151", fontsize=9)
+    # Rótulos dos lados no meio dos segmentos
+    ax.text(
+        (x_A + x_B) / 2,
+        (y_A + y_B) / 2,
+        f"AB = {AB:.3f} m",
+        color="#374151",
+        fontsize=9,
+    )
+    ax.text(
+        (x_A + x_C) / 2,
+        (y_A + y_C) / 2,
+        f"AC = {AC:.3f} m",
+        color="#374151",
+        fontsize=9,
+    )
+    ax.text(
+        (x_B + x_C) / 2,
+        (y_B + y_C) / 2,
+        f"BC = {BC:.3f} m",
+        color="#374151",
+        fontsize=9,
+    )
 
     ax.set_xlabel("X (m)", color="#111827")
     ax.set_ylabel("Y (m)", color="#111827")
     ax.tick_params(colors="#111827")
     ax.grid(True, linestyle="--", alpha=0.3, color="#9ca3af")
-    ax.set_title("Representação do triângulo em planta", color="#111827")
+    ax.set_title("Representação do triângulo em planta (ponto de vista na estação A/B/C)", color="#111827")
 
     buf = io.BytesIO()
     fig.savefig(buf, format="jpg", dpi=200, bbox_inches="tight")
     buf.seek(0)
     plt.close(fig)
     return buf, fig
-
-
-def gerar_xlsx_com_figura(info_triangulo: Dict, figura_buf: io.BytesIO) -> bytes:
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        wb = writer.book
-
-        df_resumo = pd.DataFrame(
-            {
-                "Descrição": [
-                    "Lado EST–PV1",
-                    "Lado EST–PV2",
-                    "Lado PV1–PV2",
-                    "Ângulo interno em P1",
-                    "Ângulo interno em P2",
-                    "Ângulo interno em P3",
-                    "Área do triângulo (m²)",
-                ],
-                "Valor": [
-                    f"{info_triangulo['b_EST_PV1']:.3f} m",
-                    f"{info_triangulo['c_EST_PV2']:.3f} m",
-                    f"{info_triangulo['a_PV1_PV2']:.3f} m",
-                    decimal_to_dms(info_triangulo["ang_P1_deg"]),
-                    decimal_to_dms(info_triangulo["ang_P2_deg"]),
-                    decimal_to_dms(info_triangulo["ang_P3_deg"]),
-                    f"{info_triangulo['area_m2']:.3f}",
-                ],
-            }
-        )
-        df_resumo.to_excel(writer, sheet_name="ResumoTriangulo", index=False)
-
-        ws_fig = wb.add_worksheet("FiguraTriangulo")
-        writer.sheets["FiguraTriangulo"] = ws_fig
-        if figura_buf is not None:
-            ws_fig.insert_image("B2", "triangulo.jpg", {"image_data": figura_buf})
-
-    output.seek(0)
-    return output.getvalue()
