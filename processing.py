@@ -22,28 +22,34 @@ def parse_angle_to_decimal(value: str) -> float:
     s = str(value).strip()
     if s == "":
         return float("nan")
+
+    # Caso simples: só número (com vírgula ou ponto)
     try:
         if all(ch.isdigit() or ch in ".,-+" for ch in s):
             return float(s.replace(",", "."))
     except Exception:
         pass
-    for ch in ["°", "º", "'", "’", "´", "′", '"', "″"]:
+
+    # Remover símbolos de graus, minutos, segundos
+    for ch in ["°", "º", "'", "´", "′", '"', "″"]:
         s = s.replace(ch, " ")
     s = s.replace(",", ".")
-    parts = [p for p in s.split() if p != ""]
-    if not parts:
+    partes = [p for p in s.split() if p != ""]
+    if not partes:
         return float("nan")
+
     try:
-        deg = float(parts[0])
-        minutes = float(parts[1]) if len(parts) > 1 else 0.0
-        seconds = float(parts[2]) if len(parts) > 2 else 0.0
+        deg = float(partes[0])
+        minutos = float(partes[1]) if len(partes) > 1 else 0.0
+        segundos = float(partes[2]) if len(partes) > 2 else 0.0
     except Exception:
         return float("nan")
-    sign = 1.0
+
+    sinal = 1.0
     if deg < 0:
-        sign = -1.0
+        sinal = -1.0
         deg = abs(deg)
-    return sign * (deg + minutes / 60.0 + seconds / 3600.0)
+    return sinal * (deg + minutos / 60.0 + segundos / 3600.0)
 
 
 def decimal_to_dms(angle_deg: float) -> str:
@@ -79,7 +85,7 @@ def mean_direction_circular(angles_deg: List[float]) -> float:
 
 
 # ---------------------------------------------------------------------
-# Normalização / validação
+# Normalização/validação
 # ---------------------------------------------------------------------
 def normalizar_colunas(df_original: pd.DataFrame) -> pd.DataFrame:
     df = df_original.copy()
@@ -248,9 +254,7 @@ def tabela_hz_por_serie(res: pd.DataFrame) -> pd.DataFrame:
             continue
         ref = float(sub["Hz_med_deg"].min())
         mask = df["EST"] == est
-        df.loc[mask, "Hz_reduzido_deg"] = (
-            (df.loc[mask, "Hz_med_deg"] - ref) % 360.0
-        )
+        df.loc[mask, "Hz_reduzido_deg"] = (df.loc[mask, "Hz_med_deg"] - ref) % 360.0
 
     df["Hz_reduzido_DMS"] = df["Hz_reduzido_deg"].apply(decimal_to_dms)
 
@@ -319,7 +323,7 @@ def tabela_z_por_serie(res: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------
 def tabela_distancias_medias_simetricas(res: pd.DataFrame) -> pd.DataFrame:
     aux = res[["EST", "PV", "DH_med_m"]].copy()
-    registros = {}
+    registros: Dict[Tuple[str, str], List[float]] = {}
 
     for _, row in aux.iterrows():
         a = str(row["EST"])
@@ -400,7 +404,7 @@ def tabela_resumo_final(res: pd.DataFrame, renomear_para_letras: bool = True) ->
         ]
     ].rename(
         columns={
-            "Média das séries": "Média das Séries (Hz)",
+            "Média das séries": "Média das séries (Hz)",
             "DH_med_str": "DH Médio (m)",
         }
     )
@@ -415,7 +419,7 @@ def tabela_resumo_final(res: pd.DataFrame, renomear_para_letras: bool = True) ->
                 "PV",
                 "Hz Médio",
                 "Hz Reduzido",
-                "Média das Séries (Hz)",
+                "Média das séries (Hz)",
                 "Z Corrigido",
                 "Média Z das séries",
                 "DH Médio (m)",
@@ -428,7 +432,7 @@ def tabela_resumo_final(res: pd.DataFrame, renomear_para_letras: bool = True) ->
                 "Ponto Visado",
                 "Hz Médio",
                 "Hz Reduzido",
-                "Média das Séries (Hz)",
+                "Média das séries (Hz)",
                 "Z Corrigido",
                 "Média Z das séries",
                 "DH Médio (m)",
@@ -440,15 +444,6 @@ def tabela_resumo_final(res: pd.DataFrame, renomear_para_letras: bool = True) ->
 # ---------------------------------------------------------------------
 # Triângulo
 # ---------------------------------------------------------------------
-import math
-from typing import Optional, Tuple, Dict
-
-import numpy as np
-import pandas as pd
-
-# ... (demais imports e funções permanecem iguais acima)
-
-
 def _angulo_interno(a: float, b: float, c: float) -> float:
     """
     Retorna o ângulo oposto ao lado 'a', num triângulo com lados a, b, c.
@@ -519,30 +514,30 @@ def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> O
         AB**2 + AC**2 - 2 * AB * AC * math.cos(math.radians(ang_A_deg))
     )
 
-    # Agora calculamos os outros ângulos internos:
-    #   - ang_B_deg é o ângulo em B (PV1), oposto ao lado AC
-    #   - ang_C_deg é o ângulo em C (PV2), oposto ao lado AB
+    # Ângulos em B (PV1) e C (PV2)
+    # - ang_B_deg é o ângulo em B, oposto ao lado AC
+    # - ang_C_deg é o ângulo em C, oposto ao lado AB
     ang_B_deg = _angulo_interno(AC, AB, BC)
     ang_C_deg = _angulo_interno(AB, AC, BC)
 
-    # Área do triângulo (fórmula de Heron)
+    # Área do triângulo (Heron)
     s = (AB + AC + BC) / 2.0
     area = math.sqrt(max(s * (s - AB) * (s - AC) * (s - BC), 0.0))
 
-    info = {
-        "EST": est,      # vértice A
-        "PV1": pv1,      # vértice B
-        "PV2": pv2,      # vértice C
-        "AB": AB,        # EST–PV1
-        "AC": AC,        # EST–PV2
-        "BC": BC,        # PV1–PV2
+    info: Dict[str, object] = {
+        "EST": est,   # vértice A
+        "PV1": pv1,   # vértice B
+        "PV2": pv2,   # vértice C
+        "AB": AB,     # EST–PV1
+        "AC": AC,     # EST–PV2
+        "BC": BC,     # PV1–PV2
         "ang_A_deg": ang_A_deg,  # ângulo em A (EST)
         "ang_B_deg": ang_B_deg,  # ângulo em B (PV1)
         "ang_C_deg": ang_C_deg,  # ângulo em C (PV2)
         "area_m2": area,
     }
 
-    # Também devolvemos uma versão ordenada para clareza didática:
+    # Versões ordenadas para clareza didática
     lados_ordenados = sorted(
         [
             ("AB", est, pv1, AB),
@@ -569,6 +564,55 @@ def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> O
 
 
 # ---------------------------------------------------------------------
+# Seleção automática de linhas para formar o triângulo
+# ---------------------------------------------------------------------
+def selecionar_linhas_por_estacao_e_conjunto(
+    res: pd.DataFrame, estacao_letra: str, conjunto: str
+) -> Optional[Tuple[int, int]]:
+    """
+    Seleciona automaticamente duas linhas de 'res' que formam um par válido
+    para o triângulo, de acordo com a estação (A, B, C) e o conjunto de
+    leituras (1ª, 2ª, 3ª).
+    """
+    letra_to_p = {"A": "P1", "B": "P2", "C": "P3"}
+    est_ref = letra_to_p.get(estacao_letra)
+    if est_ref is None:
+        return None
+
+    ordem_map = {"1ª leitura": 1, "2ª leitura": 2, "3ª leitura": 3}
+    ordem = ordem_map.get(conjunto)
+    if ordem is None:
+        return None
+
+    df = res.reset_index(drop=False).rename(columns={"index": "_idx_orig"})
+
+    if est_ref == "P1":  # Estação A
+        if ordem == 1:
+            mask = (df["EST"] == "P2") & (df["PV"].isin(["P3", "P1"]))
+        else:
+            mask = (df["EST"] == "P1") & (df["PV"].isin(["P2", "P3"]))
+    elif est_ref == "P2":  # Estação B
+        mask = (df["EST"] == "P2") & (df["PV"].isin(["P3", "P1"]))
+    else:  # P3, Estação C
+        mask = (df["EST"] == "P3") & (df["PV"].isin(["P1", "P2"]))
+
+    cand = df[mask].sort_values(by="_idx_orig")
+    if len(cand) < 2:
+        return None
+
+    cand = cand.reset_index(drop=True)
+    cand["par_id"] = cand.index // 2
+
+    par_desejado = ordem - 1
+    par = cand[cand["par_id"] == par_desejado]
+    if len(par) < 2:
+        return None
+
+    idxs = par["_idx_orig"].tolist()[:2]
+    return int(idxs[0]), int(idxs[1])
+
+
+# ---------------------------------------------------------------------
 # Modelo Excel (duas abas)
 # ---------------------------------------------------------------------
 def gerar_modelo_excel_bytes() -> bytes:
@@ -579,14 +623,14 @@ def gerar_modelo_excel_bytes() -> bytes:
                 "Campo": [
                     "Professor(a)",
                     "Equipamento",
-                    "Data",
+                    "Dados",
                     "Local",
                     "Patrimônio",
                 ],
                 "Valor": ["", "", "", "", ""],
             }
         )
-        df_id.to_excel(writer, sheet_name="Identificacao", index=False)
+        df_id.to_excel(writer, sheet_name="Identificação", index=False)
 
         df_dados = pd.DataFrame(
             {
