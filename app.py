@@ -308,7 +308,7 @@ def pagina_carregar_dados():
 
     if st.button("Ir para processamento"):
         st.session_state["pagina"] = "processamento"
-        st.experimental_rerun()
+        st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
