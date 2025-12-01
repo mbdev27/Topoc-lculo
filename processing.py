@@ -477,8 +477,6 @@ def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> O
       - ang_A_deg → ângulo no vértice EST
       - ang_B_deg → ângulo no vértice PV1
       - ang_C_deg → ângulo no vértice PV2
-
-    Depois disso, mapeamos didaticamente para A=P1, B=P2, C=P3.
     """
     if idx1 == idx2:
         return None
@@ -491,7 +489,6 @@ def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> O
     est1, est2 = str(r1["EST"]), str(r2["EST"])
     pv1, pv2 = str(r1["PV"]), str(r2["PV"])
 
-    # Mesma estação e pontos visados distintos
     if est1 != est2:
         return None
     if pv1 == pv2:
@@ -499,67 +496,54 @@ def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> O
 
     est = est1
 
-    # Distâncias horizontais médias (lados a partir da estação)
     AB = float(r1["DH_med_m"])  # EST–PV1
     AC = float(r2["DH_med_m"])  # EST–PV2
 
-    # Direções médias (em graus)
     hz1 = float(r1["Hz_med_deg"])
     hz2 = float(r2["Hz_med_deg"])
 
-    # Ângulo no vértice "est" entre as direções EST–PV1 e EST–PV2
     ang_A_deg = (hz2 - hz1) % 360.0
     if ang_A_deg > 180.0:
         ang_A_deg = 360.0 - ang_A_deg
 
-    # Lado BC pela lei dos cossenos (oposto ao ângulo em EST)
     BC = math.sqrt(
         AB**2 + AC**2 - 2 * AB * AC * math.cos(math.radians(ang_A_deg))
     )
 
-    # Ângulos em PV1 e PV2
-    # - ang_B_deg é o ângulo em PV1, oposto ao lado AC
-    # - ang_C_deg é o ângulo em PV2, oposto ao lado AB
     ang_B_deg = _angulo_interno(AC, AB, BC)
     ang_C_deg = _angulo_interno(AB, AC, BC)
 
-    # Área do triângulo (Heron)
     s = (AB + AC + BC) / 2.0
     area = math.sqrt(max(s * (s - AB) * (s - AC) * (s - BC), 0.0))
 
     info: Dict[str, object] = {
-        "EST": est,   # estação usada nas duas leituras
+        "EST": est,
         "PV1": pv1,
         "PV2": pv2,
-        "AB": AB,     # EST–PV1
-        "AC": AC,     # EST–PV2
-        "BC": BC,     # PV1–PV2
-        "ang_A_deg": ang_A_deg,  # ângulo em EST
-        "ang_B_deg": ang_B_deg,  # ângulo em PV1
-        "ang_C_deg": ang_C_deg,  # ângulo em PV2
+        "AB": AB,
+        "AC": AC,
+        "BC": BC,
+        "ang_A_deg": ang_A_deg,
+        "ang_B_deg": ang_B_deg,
+        "ang_C_deg": ang_C_deg,
         "area_m2": area,
     }
 
-    # -------------------------------------------------------------
-    # Mapeamento didático A = P1, B = P2, C = P3
-    # -------------------------------------------------------------
+    # Mapeamento didático A=P1, B=P2, C=P3 para listar lados/ângulos
     mapa_p_letra = {"P1": "A", "P2": "B", "P3": "C"}
 
-    # Lados em termos de pontos reais (independente da letra geométrica original)
     lados_reais = [
-        (est, pv1, AB),  # EST–PV1
-        (est, pv2, AC),  # EST–PV2
-        (pv1, pv2, BC),  # PV1–PV2
+        (est, pv1, AB),
+        (est, pv2, AC),
+        (pv1, pv2, BC),
     ]
-
     lados_rotulados = []
     for p_ini, p_fim, val in lados_reais:
         letra_ini = mapa_p_letra.get(p_ini, p_ini)
         letra_fim = mapa_p_letra.get(p_fim, p_fim)
-        rot_simples = f"{letra_ini}{letra_fim}"
-        lados_rotulados.append((rot_simples, p_ini, p_fim, val))
+        rot = f"{letra_ini}{letra_fim}"
+        lados_rotulados.append((rot, p_ini, p_fim, val))
 
-    # Ângulos em termos de pontos reais
     angulos_reais = [
         (est, ang_A_deg),
         (pv1, ang_B_deg),
@@ -570,17 +554,8 @@ def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> O
         letra = mapa_p_letra.get(p_nome, p_nome)
         angulos_rotulados.append((letra, p_nome, val))
 
-    # Ordena do maior para o menor (lados e ângulos)
-    lados_ordenados = sorted(
-        lados_rotulados,
-        key=lambda x: x[3],
-        reverse=True,
-    )
-    angulos_ordenados = sorted(
-        angulos_rotulados,
-        key=lambda x: x[2],
-        reverse=True,
-    )
+    lados_ordenados = sorted(lados_rotulados, key=lambda x: x[3], reverse=True)
+    angulos_ordenados = sorted(angulos_rotulados, key=lambda x: x[2], reverse=True)
 
     info["lados_ordenados"] = lados_ordenados
     info["angulos_ordenados"] = angulos_ordenados
