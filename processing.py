@@ -459,11 +459,54 @@ def _angulo_interno(a: float, b: float, c: float) -> float:
         return float("nan")
 
 
-def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> Optional[Dict]:
+def _media_dh_entre_pontos(res: pd.DataFrame, pa: str, pb: str) -> float:
+    """Retorna DH média simétrica entre dois pontos (usa EST–PV e PV–EST)."""
+    vals = []
+    for _, r in res.iterrows():
+        e, v = str(r["EST"]), str(r["PV"])
+        if {e, v} == {pa, pb}:
+            vals.append(float(r["DH_med_m"]))
+    if not vals:
+        return float("nan")
+    return float(sum(vals) / len(vals))
+
+
+def _direcao_media(res: pd.DataFrame, est: str, pv: str) -> float:
+    """Direção média Hz (em graus) de 'est' para 'pv'."""
+    vals = []
+    for _, r in res.iterrows():
+        if str(r["EST"]) == est and str(r["PV"]) == pv:
+            vals.append(float(r["Hz_med_deg"]))
+    if not vals:
+        return float("nan")
+    x = sum(math.cos(math.radians(a)) for a in vals)
+    y = sum(math.sin(math.radians(a)) for a in vals)
+    if x == 0 and y == 0:
+        return float("nan")
+    ang = math.degrees(math.atan2(y, x))
+    if ang < 0:
+        ang += 360
+    return ang
+
+
+def calcular_triangulo_duas_linhas(
+    res: pd.DataFrame,
+    idx1: int,
+    idx2: int,
+    estacao_op: str,
+    conjunto_op: str,
+) -> Optional[Dict]:
     """
-    Usa duas linhas de 'res' com mesma EST e PV distintos para montar o triângulo:
-      - EST é o vértice da estação (ponto de vista);
-      - PV1 e PV2 são os outros dois vértices.
+    Usa duas linhas de 'res' para montar o triângulo.
+
+    Caso geral:
+      - estação = EST comum às duas linhas;
+      - PV1 e PV2 são os pontos visados.
+
+    Caso especial (didático):
+      - se estacao_op == 'A' e conjunto_op == '1ª leitura':
+        a estação geométrica é forçada a ser P1; os lados vêm das
+        distâncias simétricas P1–P2 e P1–P3 e das direções P1->P2 e P1->P3.
     """
     if idx1 == idx2:
         return None
@@ -476,47 +519,99 @@ def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> O
     est1, est2 = str(r1["EST"]), str(r2["EST"])
     pv1, pv2 = str(r1["PV"]), str(r2["PV"])
 
-    if est1 != est2:
-        return None
-    if pv1 == pv2:
-        return None
+    # ------------------------------
+    # CASO ESPECIAL: Estação A / 1ª leitura -> estação geométrica = P1
+    # ------------------------------
+    if estacao_op == "A" and conjunto_op == "1ª leitura":
+        est = "P1"
 
-    est = est1
+        AB = _media_dh_entre_pontos(res, "P1", "P2")  # P1–P2
+        AC = _media_dh_entre_pontos(res, "P1", "P3")  # P1–P3
+        if math.isnan(AB) or math.isnan(AC):
+            return None
 
-    AB = float(r1["DH_med_m"])  # EST–PV1
-    AC = float(r2["DH_med_m"])  # EST–PV2
+        hz12 = _direcao_media(res, "P1", "P2")
+        hz13 = _direcao_media(res, "P1", "P3")
+        if math.isnan(hz12) or math.isnan(hz13):
+            return None
 
-    hz1 = float(r1["Hz_med_deg"])
-    hz2 = float(r2["Hz_med_deg"])
+        ang_A_deg = (hz13 - hz12) % 360.0
+        if ang_A_deg > 180.0:
+            ang_A_deg = 360.0 - ang_A_deg
 
-    ang_A_deg = (hz2 - hz1) % 360.0
-    if ang_A_deg > 180.0:
-        ang_A_deg = 360.0 - ang_A_deg
+        BC = math.sqrt(
+            AB**2 + AC**2 - 2 * AB * AC * math.cos(math.radians(ang_A_deg))
+        )
 
-    BC = math.sqrt(
-        AB**2 + AC**2 - 2 * AB * AC * math.cos(math.radians(ang_A_deg))
-    )
+        ang_B_deg = _angulo_interno(AC, AB, BC)  # em P2
+        ang_C_deg = _angulo_interno(AB, AC, BC)  # em P3
 
-    ang_B_deg = _angulo_interno(AC, AB, BC)
-    ang_C_deg = _angulo_interno(AB, AC, BC)
+        s = (AB + AC + BC) / 2.0
+        area = math.sqrt(max(s * (s - AB) * (s - AC) * (s - BC), 0.0))
 
-    s = (AB + AC + BC) / 2.0
-    area = math.sqrt(max(s * (s - AB) * (s - AC) * (s - BC), 0.0))
+        info: Dict[str, object] = {
+            "EST": "P1",
+            "PV1": "P2",
+            "PV2": "P3",
+            "AB": AB,
+            "AC": AC,
+            "BC": BC,
+            "ang_A_deg": ang_A_deg,
+            "ang_B_deg": ang_B_deg,
+            "ang_C_deg": ang_C_deg,
+            "area_m2": area,
+        }
 
-    info: Dict[str, object] = {
-        "EST": est,
-        "PV1": pv1,
-        "PV2": pv2,
-        "AB": AB,
-        "AC": AC,
-        "BC": BC,
-        "ang_A_deg": ang_A_deg,
-        "ang_B_deg": ang_B_deg,
-        "ang_C_deg": ang_C_deg,
-        "area_m2": area,
-    }
+    else:
+        # ------------------------------
+        # CASO GERAL
+        # ------------------------------
+        if est1 != est2 or pv1 == pv2:
+            return None
 
+        est = est1
+        AB = float(r1["DH_med_m"])  # EST–PV1
+        AC = float(r2["DH_med_m"])  # EST–PV2
+
+        hz1 = float(r1["Hz_med_deg"])
+        hz2 = float(r2["Hz_med_deg"])
+
+        ang_A_deg = (hz2 - hz1) % 360.0
+        if ang_A_deg > 180.0:
+            ang_A_deg = 360.0 - ang_A_deg
+
+        BC = math.sqrt(
+            AB**2 + AC**2 - 2 * AB * AC * math.cos(math.radians(ang_A_deg))
+        )
+
+        ang_B_deg = _angulo_interno(AC, AB, BC)
+        ang_C_deg = _angulo_interno(AB, AC, BC)
+
+        s = (AB + AC + BC) / 2.0
+        area = math.sqrt(max(s * (s - AB) * (s - AC) * (s - BC), 0.0))
+
+        info = {
+            "EST": est,
+            "PV1": pv1,
+            "PV2": pv2,
+            "AB": AB,
+            "AC": AC,
+            "BC": BC,
+            "ang_A_deg": ang_A_deg,
+            "ang_B_deg": ang_B_deg,
+            "ang_C_deg": ang_C_deg,
+            "area_m2": area,
+        }
+
+    # Rotulagem didática A=P1, B=P2, C=P3 para a listagem
     mapa_p_letra = {"P1": "A", "P2": "B", "P3": "C"}
+
+    est = info["EST"]
+    pv1 = info["PV1"]
+    pv2 = info["PV2"]
+    AB = info["AB"]
+    AC = info["AC"]
+    BC = info["BC"]
 
     lados_reais = [
         (est, pv1, AB),
@@ -531,20 +626,17 @@ def calcular_triangulo_duas_linhas(res: pd.DataFrame, idx1: int, idx2: int) -> O
         lados_rotulados.append((rot, p_ini, p_fim, val))
 
     angulos_reais = [
-        (est, ang_A_deg),
-        (pv1, ang_B_deg),
-        (pv2, ang_C_deg),
+        (est, info["ang_A_deg"]),
+        (pv1, info["ang_B_deg"]),
+        (pv2, info["ang_C_deg"]),
     ]
     angulos_rotulados = []
     for p_nome, val in angulos_reais:
         letra = mapa_p_letra.get(p_nome, p_nome)
         angulos_rotulados.append((letra, p_nome, val))
 
-    lados_ordenados = sorted(lados_rotulados, key=lambda x: x[3], reverse=True)
-    angulos_ordenados = sorted(angulos_rotulados, key=lambda x: x[2], reverse=True)
-
-    info["lados_ordenados"] = lados_ordenados
-    info["angulos_ordenados"] = angulos_ordenados
+    info["lados_ordenados"] = sorted(lados_rotulados, key=lambda x: x[3], reverse=True)
+    info["angulos_ordenados"] = sorted(angulos_rotulados, key=lambda x: x[2], reverse=True)
     info["mapa_p_letra"] = mapa_p_letra
 
     return info
