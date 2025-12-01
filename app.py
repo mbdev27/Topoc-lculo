@@ -16,6 +16,7 @@ from processing import (
     selecionar_linhas_por_estacao_e_conjunto,
     calcular_triangulo_duas_linhas,
     gerar_modelo_excel_bytes,
+    decimal_to_dms,
 )
 from plotting import plotar_triangulo_info, gerar_xlsx_com_figura
 from utils import ler_identificacao_from_df
@@ -26,20 +27,20 @@ st.set_page_config(
     page_icon="📐",
 )
 
-# =====================================================================
+# ========================================================================
 # CSS
-# =====================================================================
+# ========================================================================
 CUSTOM_CSS = """
 <style>
 body, .stApp {
   background:#f3f4f6;
-  color:#111827;
+  color: #111827;
   font-family:"Trebuchet MS",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
 }
 
 .main-card{
   background:#ffffff;
-  color:#111827;
+  color: #111827;
   border-radius:22px;
   padding:1.4rem 2.0rem 1.4rem 2.0rem;
   border:1px solid rgba(148,27,37,0.20);
@@ -50,7 +51,7 @@ body, .stApp {
 .main-card p { text-align: justify; }
 
 .ufpe-header-band{
-  width:100%;
+  width: 100%;
   padding:0.7rem 1.0rem 0.6rem 1.0rem;
   border-radius:14px;
   background:linear-gradient(90deg,#4b0000 0%,#7e0000 40%,#b30000 75%,#4b0000 100%);
@@ -104,7 +105,7 @@ body, .stApp {
 
 .stButton>button, .stDownloadButton>button {
   background: #b30000;
-  color: #111827;
+  color: #ffffff;
   border-radius: 999px;
   border: 1px solid #7f0000;
   padding: 0.35rem 1.1rem;
@@ -127,19 +128,19 @@ body, .stApp {
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
-# =====================================================================
-# Cabeçalho UFPE (usado só na página de processamento)
-# =====================================================================
+# =================================================================
+# Cabeçalho UFPE (usado apenas na página de processamento)
+# =================================================================
 def cabecalho_ufpe(info_id):
     prof = info_id.get("Professor(a)", "")
     equip = info_id.get("Equipamento", "")
-    data = info_id.get("Data", "")
+    data = info_id.get("Dados", "")
     local = info_id.get("Local", "")
     patr = info_id.get("Patrimônio", "")
 
-    def linha(label, valor):
-        if valor:
-            return f"{label}: <u>{valor}</u><br>"
+    def linha(label, value):
+        if value:
+            return f"{label}: <u>{value}</u><br>"
         else:
             return f"{label}: _________________________________<br>"
 
@@ -184,8 +185,8 @@ def cabecalho_ufpe(info_id):
         </p>
         <div class="helper-box">
             <b>Preenchimento dos dados de identificação:</b><br>
-            Os campos Professor(a), Equipamento, Data, Local e Patrimônio são lidos
-            automaticamente da aba <b>Identificacao</b> do modelo Excel. A data é exibida
+            Os campos Professor(a), Equipamento, Dados, Local e Patrimônio são lidos
+            automaticamente da aba <b>Identificação</b> do modelo Excel. Os dados são exibidos
             no formato <b>DD/MM/AAAA</b>. Caso algum campo venha em branco, ele pode ser
             completado manualmente no arquivo exportado.
         </div>
@@ -194,9 +195,9 @@ def cabecalho_ufpe(info_id):
     )
 
 
-# =====================================================================
+# ================================================================
 # Página 1 – Modelo + Upload
-# =====================================================================
+# ================================================================
 def pagina_carregar_dados():
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
 
@@ -220,7 +221,7 @@ def pagina_carregar_dados():
     st.markdown(
         """
         <p style="font-size:0.9rem;">
-        O modelo contém duas abas: <b>Identificacao</b> (dados do cabeçalho)
+        O modelo contém duas abas: <b>Identificação</b> (dados do cabeçalho)
         e <b>Dados</b> (leituras Hz, Z e distâncias).
         </p>
         """,
@@ -238,7 +239,7 @@ def pagina_carregar_dados():
         unsafe_allow_html=True,
     )
     uploaded = st.file_uploader(
-        "Envie o arquivo Excel preenchido (com abas Identificacao e Dados)",
+        "Envie o arquivo Excel (com abas Identificação e Dados)",
         type=["xlsx", "xls"],
     )
 
@@ -246,20 +247,20 @@ def pagina_carregar_dados():
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    # Lê Excel
+    # Tenta ler o Excel
     try:
         xls = pd.ExcelFile(uploaded)
 
-        # Identificacao
+        # Identificação
         sheet_id = None
         for s in xls.sheet_names:
-            if s.strip().lower() in ["identificacao", "identificação"]:
+            if s.strip().lower() in ["identificação", "identificacao"]:
                 sheet_id = s
                 break
         info_id = {
             "Professor(a)": "",
             "Equipamento": "",
-            "Data": "",
+            "Dados": "",
             "Local": "",
             "Patrimônio": "",
         }
@@ -313,15 +314,15 @@ def pagina_carregar_dados():
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-# =====================================================================
+# =======================================================================
 # Página 2 – Processamento (3 a 7)
-# =====================================================================
+# =======================================================================
 def pagina_processamento():
     if "df_uso" not in st.session_state or "info_id" not in st.session_state:
         st.warning("Nenhum dado carregado. Volte à página 'Carregar dados' primeiro.")
         if st.button("Voltar para carregar dados"):
             st.session_state["pagina"] = "carregar"
-            st.experimental_rerun()
+            st.rerun()
         return
 
     df_uso = st.session_state["df_uso"]
@@ -331,19 +332,7 @@ def pagina_processamento():
     cabecalho_ufpe(info_id)
 
     # A partir daqui, seguem as seções 3 a 7
-    from processing import (
-        calcular_linha_a_linha,
-        tabela_hz_por_serie,
-        tabela_z_por_serie,
-        tabela_distancias_medias_simetricas,
-        tabela_resumo_final,
-        selecionar_linhas_por_estacao_e_conjunto,
-        calcular_triangulo_duas_linhas,
-    )
-
-    from processing import decimal_to_dms  # usado nos textos
-
-    import streamlit as st_local  # alias
+    st_local = st
 
     # 3. Cálculo linha a linha
     st_local.markdown(
@@ -418,7 +407,7 @@ def pagina_processamento():
     resumo = tabela_resumo_final(res, renomear_para_letras=True)
     st_local.dataframe(resumo, use_container_width=True)
 
-    # 7. Triângulo selecionado
+    # 7. TRIÂNGULO SELECIONADO (CONJUNTO AUTOMÁTICO DE MEDIÇÕES)
     st_local.markdown(
         """
         <div class="section-title">
@@ -439,12 +428,12 @@ def pagina_processamento():
         )
 
     st_local.markdown(
-        "<p>O programa seleciona automaticamente o par de leituras adequado "
+        "<p>O programa seleciona automaticamente o par de leituras adequadas "
         "para formar o triângulo, conforme as regras definidas para cada estação.</p>",
         unsafe_allow_html=True,
     )
 
-   info = None
+    info = None
     img_buf = None
 
     if st_local.button("Gerar triângulo"):
@@ -459,13 +448,13 @@ def pagina_processamento():
             idx1, idx2 = pares
             info = calcular_triangulo_duas_linhas(res, idx1, idx2)
             if info is None:
-                st_local.error("Falha ao calcular o triângulo a partir das leituras selecionadas.")
+                st_local.error(
+                    "Falha ao calcular o triângulo a partir das leituras selecionadas."
+                )
             else:
-                from plotting import plotar_triangulo_info, gerar_xlsx_com_figura
-
-                est = info["EST"]
-                pv1 = info["PV1"]
-                pv2 = info["PV2"]
+                est = info["EST"]   # vértice A
+                pv1 = info["PV1"]   # vértice B
+                pv2 = info["PV2"]   # vértice C
 
                 st_local.markdown(
                     f"<p><b>Triângulo formado automaticamente por {est} (A), "
@@ -473,7 +462,7 @@ def pagina_processamento():
                     unsafe_allow_html=True,
                 )
 
-                # Lados e ângulos em ordem decrescente (didático)
+                # Lados e ângulos em ordem decrescente para clareza didática
                 lados_ord = info.get("lados_ordenados", [])
                 ang_ord = info.get("angulos_ordenados", [])
 
@@ -511,20 +500,22 @@ def pagina_processamento():
                     file_name="triangulo_ufpe_resumo_figura.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
+
     st_local.markdown(
         """
         <p class="footer-text">
-            Versão do app: <code>UFPE_v16 — fluxo em duas páginas (upload → processamento),
-            cabeçalho sempre no topo da página de processamento.</code>.
+            Versão do app: <code>UFPE_v17 — fluxo em duas páginas (upload → processamento),
+            cabeçalho sempre no topo da página de processamento, triângulo com vértices A (EST),
+            B (PV1), C (PV2), lados e ângulos exibidos em ordem decrescente.</code>
         </p>
         """,
         unsafe_allow_html=True,
     )
 
 
-# =====================================================================
+# ==================================================================
 # Controle simples de "páginas" via session_state
-# =====================================================================
+# ==================================================================
 if "pagina" not in st.session_state:
     st.session_state["pagina"] = "carregar"
 
